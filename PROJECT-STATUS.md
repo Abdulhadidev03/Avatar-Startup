@@ -82,13 +82,14 @@ Note: ANTHROPIC_API_KEY will replace GROQ_API_KEY once credits are purchased. Th
 
 ## DONE
 
-### API Routes (3 of 4)
+### API Routes (4 of 4)
 
 | Route | File | What it does |
 |---|---|---|
 | POST /api/session | src/app/api/session/route.ts | Creates a Supabase session row (optionally linked to a profile), fetches an Anam session token using CUSTOMER_CLIENT_V1 mode, returns { sessionToken, sessionId } |
 | POST /api/brain | src/app/api/brain/route.ts | Saves user turn to DB, loads business profile (if linked), fetches conversation history, asks Groq for a sales reply, detects email for lead capture, saves assistant turn, returns { replyText, leadCaptured } |
 | POST /api/ingest | src/app/api/ingest/route.ts | Crawls up to 10 pages with Firecrawl, combines content (capped at 12k chars), asks Groq to generate a structured Business Profile, saves to profiles table, returns { profileId, companyName, profileText } |
+| POST /api/analyze | src/app/api/analyze/route.ts | Reads full transcript from turns table, asks Groq to grade the call (outcome: lead_captured / demo_booked / no_conversion / abandoned, lead_score: 0-100, summary), saves to analyses table, updates session status to 'ended' |
 
 ### Pages (1 of 5)
 
@@ -108,11 +109,7 @@ Note: ANTHROPIC_API_KEY will replace GROQ_API_KEY once credits are purchased. Th
 
 ## REMAINING
 
-### API Routes (1 remaining)
-
-| Route | Priority | What to build |
-|---|---|---|
-| POST /api/analyze | HIGH | Read full transcript from turns table, ask Groq to grade the call (outcome: lead_captured / demo_booked / no_conversion / abandoned, lead_score: 0-100, summary), save to analyses table, update session status to 'ended' |
+### API Routes (0 remaining - all done)
 
 ### Frontend Pages (4 remaining)
 
