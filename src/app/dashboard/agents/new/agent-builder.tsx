@@ -68,7 +68,8 @@ function BuilderAvatarVisual({ source, customPreview, avatarId, size = 64 }: { s
 export function AgentBuilder({ initialAvatarId, initialSource, resumeAgentId }: { initialAvatarId?: string; initialSource: AvatarSource; resumeAgentId?: string }) {
   const router = useRouter();
   const resumeMode = Boolean(resumeAgentId);
-  const generatedId = useId().replace(/[^a-z0-9]/gi, "").toLowerCase();
+  const generatedSeed = useId().replace(/[^a-z0-9]/gi, "").toLowerCase();
+  const [generatedId, setGeneratedId] = useState(generatedSeed);
   const storageId = resumeAgentId ?? `agent-${generatedId}`;
   const [step, setStep] = useState<BuilderStep>(resumeMode ? 3 : 1);
   const [maxVisited, setMaxVisited] = useState<BuilderStep>(resumeMode ? 3 : 1);
@@ -84,6 +85,7 @@ export function AgentBuilder({ initialAvatarId, initialSource, resumeAgentId }: 
   const [customFileName, setCustomFileName] = useState("");
   const [consent, setConsent] = useState(false);
   const [voiceId, setVoiceId] = useState("marin");
+  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
   const [greeting, setGreeting] = useState("Hi! I’m here if you’d like help finding the right option.");
   const [tone, setTone] = useState("Warm and professional");
   const [responseLength, setResponseLength] = useState("Balanced");
@@ -97,6 +99,7 @@ export function AgentBuilder({ initialAvatarId, initialSource, resumeAgentId }: 
   const [previewOpen, setPreviewOpen] = useState(true);
   const [copied, setCopied] = useState(false);
   const [launchState, setLaunchState] = useState<LaunchState>("draft");
+  const [published, setPublished] = useState(false);
   const [launchedAgentId, setLaunchedAgentId] = useState(resumeAgentId ?? "");
   const [saveLabel, setSaveLabel] = useState("All changes saved");
   const [createdAt] = useState(() => new Date().toISOString());
@@ -140,21 +143,27 @@ export function AgentBuilder({ initialAvatarId, initialSource, resumeAgentId }: 
     name: displayName,
     role: purpose === "support" ? "Customer support" : purpose === "both" ? "Sales & support" : "Sales concierge",
     website: website.replace(/^https?:\/\//, "") || "Website not set",
-    status: "Draft",
+    status: published ? "Live" : "Draft",
     avatarId,
     conversations: 0,
     outcomes: 0,
     conversionRate: "—",
-    lastActive: "Draft saved just now",
+    lastActive: published ? "Published just now" : "Draft saved just now",
     setupProgress: Math.max(25, maxVisited * 25),
     customAvatarDataUrl: avatarSource === "custom" ? customPreview ?? undefined : undefined,
     widgetInstalled: false,
     createdAt,
     builderState,
-  }), [storageId, displayName, purpose, website, avatarId, maxVisited, avatarSource, customPreview, createdAt, builderState]);
+  }), [storageId, displayName, purpose, website, avatarId, published, maxVisited, avatarSource, customPreview, createdAt, builderState]);
 
   useEffect(() => {
     if (!resumeAgentId) {
+      if (!hydratedRef.current) {
+        const uniqueId = typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID().replaceAll("-", "")
+          : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+        setGeneratedId(uniqueId);
+      }
       hydratedRef.current = true;
       return;
     }
@@ -172,6 +181,7 @@ export function AgentBuilder({ initialAvatarId, initialSource, resumeAgentId }: 
       setTone(saved.tone); setResponseLength(saved.responseLength); setInstructions(saved.instructions); setSources(saved.sources);
       setEnabledActions(saved.enabledActions); setWidgetPosition(saved.widgetPosition); setWidgetTheme(saved.widgetTheme);
       setAutoOpen(saved.autoOpen); setInstallMethod(saved.installMethod); setSaveLabel("Draft restored");
+      setPublished(stored.status === "Live");
       hydratedRef.current = true;
     }, 0);
     return () => window.clearTimeout(timer);
@@ -195,15 +205,44 @@ export function AgentBuilder({ initialAvatarId, initialSource, resumeAgentId }: 
       goForward(2);
     }, 900);
   }
-  function handlePhoto(file?: File) { if (!file) return; if (customPreview) URL.revokeObjectURL(customPreview); setCustomPreview(URL.createObjectURL(file)); setCustomFileName(file.name); markSaving(); }
+  function handlePhoto(file?: File) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCustomPreview(typeof reader.result === "string" ? reader.result : null);
+      setCustomFileName(file.name);
+      markSaving();
+    };
+    reader.readAsDataURL(file);
+  }
   function addKnowledgeFile(file?: File) { if (!file) return; setSources((current) => [...current, { id: `file-${Date.now()}`, name: file.name, detail: "Ready", enabled: true }]); markSaving(); }
   function previewVoice(id: string) { setPlayingVoiceId(id); window.setTimeout(() => setPlayingVoiceId((current) => current === id ? null : current), 1200); }
   async function copyCode() { try { await navigator.clipboard.writeText(embedCode); } catch { /* Clipboard permissions are optional in preview. */ } setCopied(true); window.setTimeout(() => setCopied(false), 1800); }
-  function launchAgent() { setLaunchState("launching"); window.setTimeout(() => setLaunchState("live"), 800); }
+  function saveAndExit() {
+    upsertStoredAgent(draftAgent);
+    router.push("/dashboard/agents");
+  }
+  function launchAgent() {
+    setLaunchState("launching");
+    window.setTimeout(() => {
+      const liveAgent: FrontendAgent = {
+        ...draftAgent,
+        status: "Live",
+        lastActive: "Created just now",
+        setupProgress: 100,
+        widgetInstalled: false,
+        builderState: { ...builderState, step: 4, maxVisited: 4 },
+      };
+      upsertStoredAgent(liveAgent);
+      setPublished(true);
+      setLaunchedAgentId(storageId);
+      setLaunchState("live");
+    }, 800);
+  }
 
   return (
     <div className="ruh-page-stack ruh-agent-builder">
-      <BuilderHeader step={step} />
+      <BuilderHeader step={step} onSaveExit={saveAndExit} />
       <Progress step={step} maxVisited={maxVisited} onStep={setStep} />
 
       {step === 1 ? <section className="ruh-builder-surface" aria-labelledby="builder-step-one">
@@ -222,11 +261,11 @@ export function AgentBuilder({ initialAvatarId, initialSource, resumeAgentId }: 
 
       {step === 2 ? <section className="ruh-builder-surface ruh-look-step" aria-labelledby="builder-step-two">
         <div className="ruh-builder-intro"><p className="ruh-kicker">Appearance</p><h2 id="builder-step-two">Choose how your agent looks and sounds</h2><p>Use a ready-made avatar or create a custom one from a clear portrait.</p></div>
-        <div className="ruh-source-tabs" role="tablist" aria-label="Avatar source"><button className={avatarSource === "library" ? "is-active" : ""} type="button" role="tab" aria-selected={avatarSource === "library"} onClick={() => setAvatarSource("library")}>Avatar library</button><button className={avatarSource === "custom" ? "is-active" : ""} type="button" role="tab" aria-selected={avatarSource === "custom"} onClick={() => setAvatarSource("custom")}>Create from photo</button></div>
-        {avatarSource === "library" ? <div className="ruh-builder-avatar-grid">{avatars.map((avatar) => <button className={avatar.id === avatarId ? "is-selected" : ""} type="button" onClick={() => { setAvatarId(avatar.id); markSaving(); }} aria-pressed={avatar.id === avatarId} key={avatar.id}><AvatarPortrait avatarId={avatar.id} /><span><strong>{avatar.name}</strong><small>{avatar.title}</small></span>{avatar.id === avatarId ? <i><Icon name="check" width="13" height="13" /></i> : null}</button>)}</div> : <div className="ruh-custom-upload-area"><input ref={uploadRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => handlePhoto(event.target.files?.[0])} hidden />{customPreview ? <div className="ruh-uploaded-photo"><Image src={customPreview} alt="Uploaded avatar preview" width={160} height={200} unoptimized /><div><strong>{customFileName}</strong><small>Photo ready for avatar creation</small><button type="button" onClick={() => uploadRef.current?.click()}>Choose another photo</button></div></div> : <button className="ruh-upload-dropzone" type="button" onClick={() => uploadRef.current?.click()}><span><Icon name="plus" width="22" height="22" /></span><strong>Upload a clear portrait</strong><small>JPG, PNG, or WebP. Face the camera with even lighting.</small></button>}<label className="ruh-consent-check"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span>I have permission to create and use an avatar from this image.</span></label></div>}
+        <div className="ruh-source-tabs" role="group" aria-label="Avatar source"><button className={avatarSource === "library" ? "is-active" : ""} type="button" aria-pressed={avatarSource === "library"} onClick={() => setAvatarSource("library")}>Avatar library</button><button className={avatarSource === "custom" ? "is-active" : ""} type="button" aria-pressed={avatarSource === "custom"} onClick={() => setAvatarSource("custom")}>Create from photo</button></div>
+        {avatarSource === "library" ? <div className="ruh-builder-avatar-grid">{avatars.map((avatar) => <button className={avatar.id === avatarId ? "is-selected" : ""} type="button" onClick={() => { setAvatarId(avatar.id); markSaving(); }} aria-pressed={avatar.id === avatarId} key={avatar.id}><AvatarPortrait avatarId={avatar.id} /><span><strong>{avatar.name}</strong><small>{avatar.title}</small></span>{avatar.id === avatarId ? <i><Icon name="check" width="13" height="13" /></i> : null}</button>)}</div> : <div className="ruh-custom-upload-area"><input ref={uploadRef} type="file" accept="image/png,image/jpeg,image/webp" aria-label="Upload custom avatar photo" onChange={(event) => handlePhoto(event.target.files?.[0])} hidden />{customPreview ? <div className="ruh-uploaded-photo"><Image src={customPreview} alt="Uploaded avatar preview" width={160} height={200} unoptimized /><div><strong>{customFileName}</strong><small>Photo ready for avatar creation</small><button type="button" onClick={() => uploadRef.current?.click()}>Choose another photo</button></div></div> : <button className="ruh-upload-dropzone" type="button" onClick={() => uploadRef.current?.click()}><span><Icon name="plus" width="22" height="22" /></span><strong>Upload a clear portrait</strong><small>JPG, PNG, or WebP. Face the camera with even lighting.</small></button>}<label className="ruh-consent-check"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span>I have permission to create and use an avatar from this image.</span></label></div>}
         <div className="ruh-builder-divider" />
         <div className="ruh-subsection-heading"><div><h3>Choose a voice</h3><p>Preview voices later; the selected voice is used in the live test.</p></div><span>{language}</span></div>
-        <div className="ruh-voice-grid">{voices.map((voice) => <label className={voiceId === voice.id ? "is-selected" : ""} key={voice.id}><input type="radio" name="voice" checked={voiceId === voice.id} onChange={() => { setVoiceId(voice.id); markSaving(); }} /><button type="button" aria-label={`${playingVoiceId === voice.id ? "Stop" : "Preview"} ${voice.name} voice`} aria-pressed={playingVoiceId === voice.id} onClick={(event) => { event.preventDefault(); previewVoice(voice.id); }}>{playingVoiceId === voice.id ? "■" : "▶"}</button><span><strong>{voice.name}</strong><small>{voice.detail}</small></span><em>{voice.language}</em></label>)}</div>
+        <div className="ruh-voice-grid">{voices.map((voice) => <div className={voiceId === voice.id ? "is-selected" : ""} key={voice.id}><input id={`voice-${voice.id}`} type="radio" name="voice" checked={voiceId === voice.id} onChange={() => { setVoiceId(voice.id); markSaving(); }} /><button type="button" aria-label={`${playingVoiceId === voice.id ? "Stop" : "Preview"} ${voice.name} voice`} aria-pressed={playingVoiceId === voice.id} onClick={() => previewVoice(voice.id)}>{playingVoiceId === voice.id ? "■" : "▶"}</button><label htmlFor={`voice-${voice.id}`}><span><strong>{voice.name}</strong><small>{voice.detail}</small></span><em>{voice.language}</em></label></div>)}</div>
         <label className="ruh-form-field ruh-full-field"><span>Welcome message</span><textarea rows={3} value={greeting} onChange={(event) => setGreeting(event.target.value)} /><small>This is the first thing visitors hear or read.</small></label>
         <div className="ruh-builder-footer"><button className="ruh-secondary-button" type="button" onClick={() => setStep(1)}>Back</button><span>{saveLabel}</span><button className="ruh-primary-button" type="button" disabled={avatarSource === "custom" && (!customPreview || !consent)} onClick={() => goForward(3)}>Use this look & continue<Icon name="arrow" width="15" height="15" /></button></div>
       </section> : null}
@@ -239,12 +278,12 @@ export function AgentBuilder({ initialAvatarId, initialSource, resumeAgentId }: 
         <div className="ruh-builder-footer"><button className="ruh-secondary-button" type="button" onClick={() => setStep(2)}>Back</button><span>{saveLabel}</span><button className="ruh-primary-button" type="button" onClick={() => goForward(4)}>Prepare my agent<Icon name="arrow" width="15" height="15" /></button></div>
       </section> : null}
 
-      {step === 4 ? <section className="ruh-builder-surface ruh-launch-step" aria-labelledby="builder-step-four">{launchState === "live" ? <div className="ruh-launch-success"><span><Icon name="check" width="25" height="25" /></span><p className="ruh-kicker">Agent live</p><h2>{displayName} is ready to welcome visitors</h2><p>Your agent is published with its avatar, knowledge, actions, and website context.</p><div><Link className="ruh-primary-button" href="/dashboard/agents/northstar-sales">View agent</Link><button className="ruh-secondary-button" type="button" onClick={() => setLaunchState("draft")}>Return to setup</button></div></div> : <>
+      {step === 4 ? <section className="ruh-builder-surface ruh-launch-step" aria-labelledby="builder-step-four">{launchState === "live" ? <div className="ruh-launch-success"><span><Icon name="check" width="25" height="25" /></span><p className="ruh-kicker">Agent ready</p><h2>{displayName} is ready to welcome visitors</h2><p>Your agent is published with its avatar, knowledge, actions, and website context. Install the widget when you are ready to receive visitors.</p><div><Link className="ruh-primary-button" href={`/dashboard/agents/${launchedAgentId || storageId}`}>View agent</Link><button className="ruh-secondary-button" type="button" onClick={() => setLaunchState("draft")}>Return to setup</button></div></div> : <>
         <div className="ruh-builder-intro"><p className="ruh-kicker">Preview and deploy</p><h2 id="builder-step-four">Make it feel at home on your website</h2><p>Adjust the widget, copy one small code snippet, and launch when you are ready.</p></div>
         <div className="ruh-launch-layout"><div className="ruh-widget-controls">
           <div className="ruh-builder-section-block"><div className="ruh-subsection-heading"><div><h3>Widget appearance</h3><p>A quiet default that keeps your website in focus.</p></div></div><div className="ruh-control-pair"><label className="ruh-form-field"><span>Position</span><select value={widgetPosition} onChange={(event) => setWidgetPosition(event.target.value as "left" | "right")}><option value="right">Bottom right</option><option value="left">Bottom left</option></select></label><label className="ruh-form-field"><span>Appearance</span><select value={widgetTheme} onChange={(event) => setWidgetTheme(event.target.value as "light" | "dark")}><option value="light">Light</option><option value="dark">Dark</option></select></label></div><label className="ruh-setting-row"><span><strong>Open with a greeting</strong><small>Invite visitors after a short delay.</small></span><span className="ruh-switch"><input type="checkbox" checked={autoOpen} onChange={(event) => setAutoOpen(event.target.checked)} /><i /></span></label></div>
           <div className="ruh-builder-section-block"><div className="ruh-subsection-heading"><div><h3>Install on your website</h3><p>Choose your platform and follow the short instructions.</p></div></div><div className="ruh-platform-row">{["JavaScript", "Shopify", "WordPress", "Webflow", "GTM"].map((method) => <button className={installMethod === method ? "is-active" : ""} type="button" onClick={() => setInstallMethod(method)} key={method}>{method}</button>)}</div><div className="ruh-code-snippet"><code>{embedCode}</code><button type="button" onClick={copyCode}>{copied ? "Copied" : "Copy code"}</button></div><div className="ruh-install-actions"><button className="ruh-secondary-button" type="button" onClick={() => setSaveLabel("Installation instructions prepared for email")}>Email instructions</button><button className="ruh-secondary-button" type="button" onClick={() => setSaveLabel("Installation check is ready after your site is published")}>Check installation</button></div></div>
-        </div><div className={`ruh-site-preview is-${widgetTheme}`}><div className="ruh-browser-bar"><i /><i /><i /><span>{website || "yourwebsite.com"}</span></div><div className="ruh-preview-site-content"><span /><strong /><span /><div /><div /></div><div className={`ruh-widget-preview is-${widgetPosition}`}><div className="ruh-widget-message"><BuilderAvatarVisual source={avatarSource} customPreview={customPreview} avatarId={avatarId} /><span><strong>{displayName}</strong><small>{greeting}</small></span><button type="button" aria-label="Close preview">×</button></div><button className="ruh-widget-launcher" type="button"><BuilderAvatarVisual source={avatarSource} customPreview={customPreview} avatarId={avatarId} size={48} /><span>Talk to {displayName}</span></button></div></div></div>
+        </div><div className={`ruh-site-preview is-${widgetTheme}`}><div className="ruh-browser-bar"><i /><i /><i /><span>{website || "yourwebsite.com"}</span></div><div className="ruh-preview-site-content"><span /><strong /><span /><div /><div /></div><div className={`ruh-widget-preview is-${widgetPosition}`}>{previewOpen ? <div className="ruh-widget-message"><BuilderAvatarVisual source={avatarSource} customPreview={customPreview} avatarId={avatarId} /><span><strong>{displayName}</strong><small>{greeting}</small></span><button type="button" aria-label="Close preview" onClick={() => setPreviewOpen(false)}>×</button></div> : null}<button className="ruh-widget-launcher" type="button" aria-expanded={previewOpen} onClick={() => setPreviewOpen((open) => !open)}><BuilderAvatarVisual source={avatarSource} customPreview={customPreview} avatarId={avatarId} size={48} /><span>{previewOpen ? "Hide" : "Talk to"} {displayName}</span></button></div></div></div>
         <div className="ruh-launch-checklist"><span><Icon name="check" width="14" height="14" /> Website knowledge ready</span><span><Icon name="check" width="14" height="14" /> Avatar and voice selected</span><span><Icon name="check" width="14" height="14" /> {Object.values(enabledActions).filter(Boolean).length} actions enabled</span></div>
         <div className="ruh-builder-footer"><button className="ruh-secondary-button" type="button" onClick={() => setStep(3)}>Back</button><span>{copied ? "Website code copied" : saveLabel}</span><button className="ruh-primary-button" type="button" disabled={launchState === "launching"} onClick={launchAgent}>{launchState === "launching" ? "Launching…" : "Launch agent"}<Icon name="arrow" width="15" height="15" /></button></div>
       </>}</section> : null}

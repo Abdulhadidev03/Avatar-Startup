@@ -6,11 +6,12 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import { PageHeader, StatusBadge } from "../dashboard-ui";
 import { agents } from "../mock-data";
+import { useDialogFocus } from "../use-dialog-focus";
+import { readStoredAgents, type FrontendAgent } from "../agents/agent-storage";
 
 type Platform = "HTML" | "Shopify" | "WordPress" | "Google Tag Manager";
 
@@ -83,60 +84,9 @@ function platformSlug(platform: Platform) {
   return platform.toLowerCase().replaceAll(" ", "-");
 }
 
-function useDialogFocus(open: boolean, onClose: () => void) {
-  const dialogRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const frame = window.requestAnimationFrame(() => {
-      const preferred = dialogRef.current?.querySelector<HTMLElement>("[data-autofocus]");
-      const first = dialogRef.current?.querySelector<HTMLElement>(
-        'button:not([disabled]), input:not([disabled]), select:not([disabled]), [href]',
-      );
-      (preferred ?? first ?? dialogRef.current)?.focus();
-    });
-
-    function handleKeyDown(event: globalThis.KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onClose();
-        return;
-      }
-      if (event.key !== "Tab" || !dialogRef.current) return;
-      const focusable = Array.from(
-        dialogRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), input:not([disabled]), select:not([disabled]), [href]',
-        ),
-      );
-      if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = previousOverflow;
-      previousFocus?.focus();
-    };
-  }, [onClose, open]);
-
-  return dialogRef;
-}
-
 export default function WebsitesPage() {
   const [websites, setWebsites] = useState(initialWebsites);
+  const [availableAgents, setAvailableAgents] = useState<FrontendAgent[]>(agents);
   const [selectedId, setSelectedId] = useState(initialWebsites[0].id);
   const [platform, setPlatform] = useState<Platform>("HTML");
   const [copied, setCopied] = useState(false);
@@ -148,9 +98,20 @@ export default function WebsitesPage() {
   const closeAddWebsite = useCallback(() => setShowAddWebsite(false), []);
   const addWebsiteDialogRef = useDialogFocus(showAddWebsite, closeAddWebsite);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const stored = readStoredAgents();
+      const storedById = new Map(stored.map((agent) => [agent.id, agent]));
+      const mergedStatic = agents.map((agent) => storedById.get(agent.id) ?? agent);
+      const createdAgents = stored.filter((agent) => !agents.some((item) => item.id === agent.id));
+      setAvailableAgents([...createdAgents, ...mergedStatic]);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   const selectedWebsite =
     websites.find((website) => website.id === selectedId) ?? websites[0];
-  const assignedAgent = agents.find((agent) => agent.id === selectedWebsite.agentId) ?? null;
+  const assignedAgent = availableAgents.find((agent) => agent.id === selectedWebsite.agentId) ?? null;
   const eligibleAgent = assignedAgent?.status === "Live";
   const snippet = useMemo(
     () =>
@@ -295,7 +256,7 @@ export default function WebsitesPage() {
             <span>Assigned agent</span>
             <select value={selectedWebsite.agentId ?? ""} onChange={(event) => assignAgent(event.target.value)}>
               <option value="">Choose an agent</option>
-              {agents.map((agent) => (
+              {availableAgents.map((agent) => (
                 <option value={agent.id} key={agent.id}>
                   {agent.name} · {agent.status === "Live" ? "Ready" : `${agent.status} — finish setup`}
                 </option>

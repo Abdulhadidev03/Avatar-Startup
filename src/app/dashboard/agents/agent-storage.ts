@@ -70,12 +70,20 @@ export function upsertStoredAgent(agent: FrontendAgent) {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   } catch {
     const withoutPhoto = next.map((item) => ({ ...item, customAvatarDataUrl: undefined, builderState: item.builderState ? { ...item.builderState, customAvatarDataUrl: null } : undefined }));
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(withoutPhoto));
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(withoutPhoto));
+    } catch {
+      // Storage is optional prototype persistence; the visible builder remains usable.
+    }
   }
 }
 
 export function removeStoredAgent(id: string) {
   if (typeof window === "undefined") return;
   const next = readStoredAgents().filter((agent) => agent.id !== id);
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // Ignore unavailable browser storage in local/demo environments.
+  }
 }

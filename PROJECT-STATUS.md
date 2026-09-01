@@ -1,14 +1,17 @@
 # Avatar Sales Widget MVP — Project Status
 
-Last updated: 2026-09-01
+Last updated: 2026-09-02
 
-## Dashboard frontend update — 2026-09-01
+## Dashboard frontend update — 2026-09-02
 
 The expanded Ruhana product dashboard is now implemented as a complete interactive frontend prototype. It includes the Agents and Analytics modes, owned-agent management, an original avatar library, custom-photo onboarding, the four-step builder, per-agent configuration and deployment, conversations, websites, integrations, billing, settings, business-impact analytics, responsive layouts, and realistic populated states.
 
 - `/` and `/dashboard` now open `/dashboard/agents`.
 - The product route map and backend wiring boundaries are documented in `DASHBOARD-HANDOFF.md`.
 - The visual language and reusable token contract are documented in `DESIGN-SYSTEM.md`.
+- Builder drafts, launches, generated agent IDs, pause/resume state, and custom-photo previews persist locally for the frontend prototype and flow into My Agents, agent workspaces, website assignment, and analytics filters.
+- Conversations, analytics, usage, and billing now share one reconciled demo baseline; draft agents no longer display invented deployment health or business impact.
+- Lint, TypeScript, the optimized production build, structural accessibility checks, and all dashboard route renders pass.
 - Dashboard data and service actions are still intentionally mocked; backend and AI teams should replace those seams with real APIs, persistence, generation, and deployment services.
 - The original MVP notes below remain as the implementation history and backend contract. Where the old frontend checklist conflicts with this update, this section is current.
 

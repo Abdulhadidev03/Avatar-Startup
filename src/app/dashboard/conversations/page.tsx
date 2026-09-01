@@ -20,11 +20,11 @@ const rangeMetrics: Record<
   DateRange,
   { conversations: string; outcomes: string; rate: string; duration: string; trend: string; minutes: string }
 > = {
-  today: { conversations: "47", outcomes: "24", rate: "51.1%", duration: "3m 28s", trend: "Since midnight", minutes: "163 connected minutes" },
-  yesterday: { conversations: "52", outcomes: "30", rate: "57.7%", duration: "3m 51s", trend: "Complete day", minutes: "200 connected minutes" },
-  "7": { conversations: "302", outcomes: "161", rate: "53.3%", duration: "3m 39s", trend: "↑ 6.8% from previous period", minutes: "1,102 connected minutes" },
-  "30": { conversations: "1,284", outcomes: "706", rate: "55.0%", duration: "3m 45s", trend: "↑ 8.3% from previous period", minutes: "4,820 connected minutes" },
-  "90": { conversations: "3,562", outcomes: "1,904", rate: "53.5%", duration: "3m 52s", trend: "↑ 11.2% from previous period", minutes: "13,776 connected minutes" },
+  today: { conversations: "47", outcomes: "19", rate: "40.4%", duration: "3m 28s", trend: "Since midnight", minutes: "163 connected minutes" },
+  yesterday: { conversations: "52", outcomes: "21", rate: "40.4%", duration: "3m 51s", trend: "Complete day", minutes: "200 connected minutes" },
+  "7": { conversations: "342", outcomes: "137", rate: "40.1%", duration: "3m 46s", trend: "↑ 6.8% from previous period", minutes: "1,288 connected minutes" },
+  "30": { conversations: "1,284", outcomes: "514", rate: "40.0%", duration: "3m 45s", trend: "↑ 8.3% from previous period", minutes: "4,820 connected minutes" },
+  "90": { conversations: "3,415", outcomes: "1,367", rate: "40.0%", duration: "3m 46s", trend: "↑ 11.2% from previous period", minutes: "12,840 connected minutes" },
 };
 
 function outcomeClass(outcome: ConversationOutcome) {

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { readStoredAgents } from "../agents/agent-storage";
 import {
   agents,
   funnel,
@@ -23,6 +24,7 @@ import {
 } from "./analytics-data";
 
 type AgentFilter = "all" | (typeof agents)[number]["id"];
+type AnalyticsAgent = (typeof agents)[number];
 type SiteFilter = "all" | (typeof sites)[number]["id"];
 type TrendMetric = keyof typeof trendSeries;
 type OutcomeKind = "All" | "Sales" | "Support";
@@ -79,11 +81,12 @@ function getFilteredSnapshot(
   period: PeriodKey,
   siteId: SiteFilter,
   agentId: AgentFilter,
+  agentOptions: AnalyticsAgent[] = agents,
 ): MetricSnapshot {
   const snapshot = periodSnapshots[period];
   const base = periodSnapshots["30d"];
   const site = sites.find((item) => item.id === siteId);
-  const agent = agents.find((item) => item.id === agentId);
+  const agent = agentOptions.find((item) => item.id === agentId);
 
   if (site && agent && site.agentId !== agent.id) {
     return {
@@ -116,6 +119,7 @@ function AnalyticsFilters({
   onPeriodChange,
   onSiteChange,
   onAgentChange,
+  agentOptions,
 }: {
   period: PeriodKey;
   site: SiteFilter;
@@ -123,6 +127,7 @@ function AnalyticsFilters({
   onPeriodChange: (period: PeriodKey) => void;
   onSiteChange: (site: SiteFilter) => void;
   onAgentChange: (agent: AgentFilter) => void;
+  agentOptions: AnalyticsAgent[];
 }) {
   const hasFilters = period !== "30d" || site !== "all" || agent !== "all";
 
@@ -170,7 +175,7 @@ function AnalyticsFilters({
             onChange={(event) => onAgentChange(event.target.value as AgentFilter)}
           >
             <option value="all">All agents</option>
-            {agents.map((item) => (
+            {agentOptions.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.name} · {item.role}
               </option>
@@ -844,8 +849,28 @@ export function AnalyticsDashboard({ view }: { view: AnalyticsView }) {
   const [period, setPeriod] = useState<PeriodKey>("30d");
   const [site, setSite] = useState<SiteFilter>("all");
   const [agent, setAgent] = useState<AgentFilter>("all");
+  const [agentOptions, setAgentOptions] = useState<AnalyticsAgent[]>(agents);
   const content = pageContent[view];
-  const metrics = useMemo(() => getFilteredSnapshot(period, site, agent), [period, site, agent]);
+  const metrics = useMemo(
+    () => getFilteredSnapshot(period, site, agent, agentOptions),
+    [period, site, agent, agentOptions],
+  );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const stored = readStoredAgents();
+      const storedById = new Map(stored.map((item) => [item.id, item]));
+      const existing = agents.map((item) => {
+        const saved = storedById.get(item.id);
+        return saved ? { ...item, ...saved, revenue: item.revenue, minutes: item.minutes } : item;
+      });
+      const created = stored
+        .filter((item) => !agents.some((agentItem) => agentItem.id === item.id))
+        .map((item) => ({ ...item, revenue: 0, minutes: 0 }));
+      setAgentOptions([...created, ...existing]);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   return (
     <div className="ruh-page-stack ruh-analytics-page">
@@ -868,6 +893,7 @@ export function AnalyticsDashboard({ view }: { view: AnalyticsView }) {
         onPeriodChange={setPeriod}
         onSiteChange={setSite}
         onAgentChange={setAgent}
+        agentOptions={agentOptions}
       />
 
       {view === "overview" ? <Overview metrics={metrics} agentFilter={agent} period={period} siteFilter={site} /> : null}

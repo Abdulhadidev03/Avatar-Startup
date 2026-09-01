@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../dashboard-icons";
 import { AvatarPortrait, StatusBadge } from "../dashboard-ui";
 import { agents, avatars, type AvatarCategory, type AvatarProfile } from "../mock-data";
-import { readStoredAgents, type FrontendAgent } from "./agent-storage";
+import { useDialogFocus } from "../use-dialog-focus";
+import { readStoredAgents, upsertStoredAgent, type FrontendAgent } from "./agent-storage";
 
 const filters: Array<"All" | AvatarCategory> = [
   "All", "Sales", "Support", "Commerce", "Onboarding", "Hospitality", "Education",
@@ -20,17 +21,33 @@ function AgentCard({ agent }: { agent: FrontendAgent }) {
   const [status, setStatus] = useState(agent.status);
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const isDraft = status === "Draft";
   const isPaused = status === "Paused";
 
   useEffect(() => {
     if (!menuOpen) return;
+    const focusTimer = window.setTimeout(() => menuRef.current?.querySelector<HTMLElement>("a, button")?.focus(), 0);
     const closeMenu = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMenuOpen(false);
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+        window.setTimeout(() => menuTriggerRef.current?.focus(), 0);
+      }
+    };
+    const closeOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!menuRef.current?.contains(target) && !menuTriggerRef.current?.contains(target)) setMenuOpen(false);
     };
     window.addEventListener("keydown", closeMenu);
-    return () => window.removeEventListener("keydown", closeMenu);
+    window.addEventListener("mousedown", closeOutside);
+    return () => { window.clearTimeout(focusTimer); window.removeEventListener("keydown", closeMenu); window.removeEventListener("mousedown", closeOutside); };
   }, [menuOpen]);
+
+  function updateStatus(nextStatus: FrontendAgent["status"]) {
+    setStatus(nextStatus);
+    upsertStoredAgent({ ...agent, status: nextStatus, lastActive: "Updated just now" });
+  }
 
   async function copyInstallCode() {
     const code = `<script src="https://widget.ruhana.ai/v1.js" data-agent="${agent.id}"></script>`;
@@ -48,14 +65,14 @@ function AgentCard({ agent }: { agent: FrontendAgent }) {
       <div className="ruh-agent-card-body">
         <div className="ruh-agent-card-title-row">
           <div><h3>{agent.name}</h3><p>{agent.role}</p></div>
-          <button type="button" className="ruh-more-button" aria-label={`More options for ${agent.name}`} aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}>
+          <button ref={menuTriggerRef} type="button" className="ruh-more-button" aria-label={`More options for ${agent.name}`} aria-controls={`agent-actions-${agent.id}`} aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}>
             <span aria-hidden="true">•••</span>
           </button>
-          {menuOpen ? <div className="ruh-agent-card-menu" role="menu">
-            <Link href={`/dashboard/agents/${agent.id}`} role="menuitem" onClick={() => setMenuOpen(false)}>Open agent</Link>
-            <Link href="/dashboard/conversations" role="menuitem" onClick={() => setMenuOpen(false)}>View conversations</Link>
-            <button type="button" role="menuitem" onClick={copyInstallCode}>{copied ? "Install code copied" : "Copy install code"}</button>
-            {!isDraft ? <button type="button" role="menuitem" onClick={() => { setStatus(isPaused ? "Live" : "Paused"); setMenuOpen(false); }}>{isPaused ? "Resume agent" : "Pause agent"}</button> : null}
+          {menuOpen ? <div ref={menuRef} className="ruh-agent-card-menu" id={`agent-actions-${agent.id}`} role="group" aria-label={`${agent.name} actions`}>
+            <Link href={`/dashboard/agents/${agent.id}`} onClick={() => setMenuOpen(false)}>Open agent</Link>
+            <Link href="/dashboard/conversations" onClick={() => setMenuOpen(false)}>View conversations</Link>
+            <button type="button" onClick={copyInstallCode}>{copied ? "Install code copied" : "Copy install code"}</button>
+            {!isDraft ? <button type="button" onClick={() => { updateStatus(isPaused ? "Live" : "Paused"); setMenuOpen(false); }}>{isPaused ? "Resume agent" : "Pause agent"}</button> : null}
           </div> : null}
         </div>
         <p className="ruh-agent-domain">{agent.website}</p>
@@ -72,7 +89,7 @@ function AgentCard({ agent }: { agent: FrontendAgent }) {
         )}
         <div className="ruh-agent-card-footer">
           <span>{agent.lastActive}</span>
-          <Link className={isDraft || isPaused ? "ruh-primary-button" : "ruh-secondary-button"} href={isDraft ? `/dashboard/agents/new?resume=${agent.id}` : `/dashboard/agents/${agent.id}`}>
+          <Link className={isDraft || isPaused ? "ruh-primary-button" : "ruh-secondary-button"} href={isDraft ? `/dashboard/agents/new?resume=${agent.id}` : `/dashboard/agents/${agent.id}`} onClick={() => { if (isPaused) updateStatus("Live"); }}>
             {isDraft ? "Continue setup" : isPaused ? "Resume agent" : "Open agent"}
             <Icon name="arrow" width="14" height="14" />
           </Link>
@@ -110,8 +127,11 @@ export function AgentsHome() {
   const [search, setSearch] = useState("");
   const [chooserOpen, setChooserOpen] = useState(false);
   const [previewAvatar, setPreviewAvatar] = useState<AvatarProfile | null>(null);
-  const activeDialogRef = useRef<HTMLElement>(null);
-  const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const closeActiveDialog = useCallback(() => {
+    setChooserOpen(false);
+    setPreviewAvatar(null);
+  }, []);
+  const activeDialogRef = useDialogFocus(chooserOpen || Boolean(previewAvatar), closeActiveDialog);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -123,18 +143,6 @@ export function AgentsHome() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
-
-  useEffect(() => {
-    const dialogOpen = chooserOpen || Boolean(previewAvatar);
-    if (!dialogOpen) return;
-    restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const focusTimer = window.setTimeout(() => activeDialogRef.current?.querySelector<HTMLElement>("button, a, input")?.focus(), 0);
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { event.preventDefault(); setChooserOpen(false); setPreviewAvatar(null); }
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => { window.clearTimeout(focusTimer); window.removeEventListener("keydown", closeOnEscape); restoreFocusRef.current?.focus(); };
-  }, [chooserOpen, previewAvatar]);
 
   const visibleAvatars = useMemo(() => {
     const query = search.trim().toLowerCase();
