@@ -45,38 +45,8 @@ export const periodSnapshots: Record<PeriodKey, MetricSnapshot> = {
   },
 };
 
-export const agents = [
-  {
-    id: "northstar-sales",
-    name: "Nova",
-    role: "Sales concierge",
-    status: "Live",
-    conversations: 842,
-    outcomes: 196,
-    revenue: 36620,
-    minutes: 3180,
-  },
-  {
-    id: "ruh-support",
-    name: "Nia Support",
-    role: "Customer support",
-    status: "Live",
-    conversations: 442,
-    outcomes: 318,
-    revenue: 6240,
-    minutes: 1640,
-  },
-  {
-    id: "onboarding-guide",
-    name: "Theo Onboarding",
-    role: "Product onboarding",
-    status: "Draft",
-    conversations: 0,
-    outcomes: 0,
-    revenue: 0,
-    minutes: 0,
-  },
-] as const;
+// No mock agents — real agents come from the /api/analytics endpoint
+export const agents: { id: string; name: string; role: string; status: string; conversations: number; outcomes: number; revenue: number; minutes: number }[] = [];
 
 export const sites = [
   {

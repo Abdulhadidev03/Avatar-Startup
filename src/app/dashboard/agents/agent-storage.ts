@@ -37,6 +37,12 @@ export type StoredBuilderState = {
 export type FrontendAgent = AgentProfile & {
   setupProgress?: number;
   customAvatarDataUrl?: string;
+  avatarImageUrl?: string;       // persisted URL from Supabase Storage
+  greeting?: string;
+  tone?: string;
+  responseLength?: string;
+  language?: string;
+  instructions?: string;
   widgetInstalled?: boolean;
   createdAt?: string;
   builderState?: StoredBuilderState;

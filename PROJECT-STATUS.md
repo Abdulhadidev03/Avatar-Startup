@@ -1,6 +1,6 @@
 # Avatar Sales Widget MVP — Project Status
 
-Last updated: 2026-09-01
+Last updated: 2026-09-02
 
 ## Dashboard frontend update — 2026-09-01
 
@@ -32,15 +32,23 @@ A demo for investors: a fake "client website" with a floating widget. A visitor 
 src/
   app/
     api/
-      session/route.ts    ← POST /api/session (done)
-      brain/route.ts       ← POST /api/brain (done)
-      ingest/route.ts      ← POST /api/ingest (done)
-    test-avatar/page.tsx   ← throwaway test page (done)
-    page.tsx               ← default Next.js page (needs replacing)
-    layout.tsx             ← root layout
+      session/route.ts        ← POST /api/session (done — now agent-aware)
+      brain/route.ts           ← POST /api/brain (done — now agent-aware)
+      ingest/route.ts          ← POST /api/ingest (done)
+      analyze/route.ts         ← POST /api/analyze (done)
+      agents/route.ts          ← GET+POST /api/agents (done)
+      agents/[agentId]/route.ts← GET+PUT+DELETE /api/agents/:id (done)
+      analytics/route.ts       ← GET /api/analytics?period=30d (done)
+    test-avatar/page.tsx       ← throwaway test page (done)
+    dashboard/                 ← full dashboard (wired to real data)
+    page.tsx                   ← default Next.js page (needs replacing)
+    layout.tsx                 ← root layout
     globals.css
   lib/
-    supabase.ts            ← server-side Supabase admin client
+    supabase.ts                ← server-side Supabase admin client
+    supabase-browser.ts        ← browser-side client (anon key)
+supabase/
+  migration.sql                ← SQL to create agents table (run in Supabase SQL Editor)
 ```
 
 ## THE CONTRACT (do not change without all 3 people agreeing)
@@ -67,7 +75,8 @@ POST /api/ingest
 
 ### Database tables (all created in Supabase)
 
-- sessions (id, started_at, ended_at, page_url, status, profile_id)
+- agents (id, name, role, website, status, avatar_id, anam_avatar_id, anam_voice_id, greeting, tone, response_length, instructions, language, purpose, profile_id, created_at, updated_at) — **NEW**
+- sessions (id, started_at, ended_at, page_url, status, profile_id, agent_id) — **agent_id added**
 - turns (id, session_id, role, content, created_at)
 - leads (id, session_id, name, email, interest, created_at)
 - analyses (session_id, outcome, lead_score, summary, created_at)
@@ -92,64 +101,79 @@ Note: ANTHROPIC_API_KEY will replace GROQ_API_KEY once credits are purchased. Th
 
 ## DONE
 
-### API Routes (4 of 4)
+### API Routes (7 of 7)
 
 | Route | File | What it does |
 |---|---|---|
-| POST /api/session | src/app/api/session/route.ts | Creates a Supabase session row (optionally linked to a profile), fetches an Anam session token using CUSTOMER_CLIENT_V1 mode, returns { sessionToken, sessionId } |
-| POST /api/brain | src/app/api/brain/route.ts | Saves user turn to DB, loads business profile (if linked), fetches conversation history, asks Groq for a sales reply, detects email for lead capture, saves assistant turn, returns { replyText, leadCaptured } |
-| POST /api/ingest | src/app/api/ingest/route.ts | Crawls up to 10 pages with Firecrawl, combines content (capped at 12k chars), asks Groq to generate a structured Business Profile, saves to profiles table, returns { profileId, companyName, profileText } |
-| POST /api/analyze | src/app/api/analyze/route.ts | Reads full transcript from turns table, asks Groq to grade the call (outcome: lead_captured / demo_booked / no_conversion / abandoned, lead_score: 0-100, summary), saves to analyses table, updates session status to 'ended' |
+| POST /api/session | src/app/api/session/route.ts | Creates session row (now accepts optional agentId — loads avatar/voice config from agents table), fetches Anam session token, returns { sessionToken, sessionId } |
+| POST /api/brain | src/app/api/brain/route.ts | Saves user turn, loads agent config (name, instructions, profile) from session → agent chain, asks Groq for a sales reply, saves assistant turn, returns { replyText, leadCaptured } |
+| POST /api/ingest | src/app/api/ingest/route.ts | Crawls up to 10 pages with Firecrawl, asks Groq to generate a Business Profile, saves to profiles table |
+| POST /api/analyze | src/app/api/analyze/route.ts | Reads transcript, asks Groq to grade the call, saves to analyses table, marks session ended |
+| GET/POST /api/agents | src/app/api/agents/route.ts | GET lists all agents with computed stats (conversations, outcomes, conversion rate). POST creates a new agent. |
+| GET/PUT/DELETE /api/agents/:id | src/app/api/agents/[agentId]/route.ts | Full CRUD for individual agents with computed stats |
+| GET /api/analytics | src/app/api/analytics/route.ts | Aggregates sessions/analyses/leads for a period (7d/30d/90d), returns KPIs with % change vs previous period, per-agent breakdown |
 
-### Pages (1 of 5)
+### Frontend Wiring (all dashboard pages)
+
+| Page | What was wired |
+|---|---|
+| /dashboard/conversations | Reads real sessions, turns, analyses, leads from Supabase. Resolves agent names from agents table. Merges with mock data as fallback. |
+| /dashboard/agents | Fetches real agents from GET /api/agents. Shows computed conversation counts and outcome stats. Falls back to mock data if no agents in DB. |
+| /dashboard/agents/[id] | Loads real agent from GET /api/agents/:id. Fetches real conversations for that agent from Supabase. |
+| /dashboard/agents/new (builder) | On "Launch agent" → saves to DB via POST /api/agents. Links to real agent ID after creation. |
+| /dashboard/analytics | Fetches real KPIs from GET /api/analytics. Shows real conversation/outcome/minute counts. Falls back to mock charts/trends. |
+
+### Pages (1 standalone)
 
 | Page | File | What it does |
 |---|---|---|
-| /test-avatar | src/app/test-avatar/page.tsx | Throwaway test page with video element, Start/End Call buttons, event log. Connects to Anam, streams avatar video, sends greeting on connect, routes user speech through /api/brain, feeds replies to avatar via anam.talk() |
+| /test-avatar | src/app/test-avatar/page.tsx | Throwaway test page — connects to Anam, streams avatar, runs speech loop through /api/brain |
 
 ### Infrastructure
 
 - Next.js 16 project scaffolded (TypeScript, Tailwind, App Router, src/ dir)
 - Pushed to GitHub: github.com/Huzaifa134/agaentic_bot
-- Supabase tables created (all 5 tables + profile_id column on sessions)
+- Supabase tables created (6 tables: sessions, turns, leads, analyses, profiles, agents)
 - Anam Custom LLM mode working (avatar speaks, hears, responds)
 - Full speech loop working: user speaks → Anam transcribes → /api/brain → Groq replies → avatar speaks with lipsync
+- Browser-safe Supabase client for dashboard reads (supabase-browser.ts)
 
 ---
 
 ## REMAINING
 
-### API Routes (0 remaining - all done)
+### One-time setup: Run migration SQL
 
-### Frontend Pages (4 remaining)
+Run `supabase/migration.sql` in Supabase SQL Editor to create the `agents` table and add `agent_id` to sessions.
+
+### Frontend Pages (2 remaining for demo)
 
 | Page | Priority | What to build |
 |---|---|---|
-| Fake client site (/) | HIGH | Replace default Next.js page with a realistic-looking demo business website (e.g. "FlowDesk" — a SaaS product). This is where the floating widget lives. Must look real for the investor demo. |
-| Floating widget | HIGH | Chat bubble in bottom-right corner of the client site. Click → avatar video pops up in a panel/modal. Contains: video element, captions, "End Call" button. Calls /api/session on open, runs the speech loop, triggers /api/analyze on close. |
-| Dashboard (/dashboard) | HIGH | Shows all past calls in a table/card layout. For each call: transcript (from turns), outcome badge ("Lead Captured ✅"), lead score, summary, lead info (name/email). Reads from sessions, turns, analyses, leads tables via Supabase anon key (client-side reads). |
-| Onboarding page (/onboard) | MEDIUM | Simple form: paste a URL → calls /api/ingest → shows the generated Business Profile. Used to demo "paste your website and the bot learns your business." |
+| Fake client site (/) | HIGH | Replace default Next.js page with a demo business website. This is where the floating widget lives. |
+| Floating widget | HIGH | Chat bubble → avatar video panel. Calls /api/session (with agentId) on open, runs speech loop, triggers /api/analyze on close. |
 
 ### Call Flow (3 remaining pieces)
 
 | Feature | Priority | What to build |
 |---|---|---|
-| Hang-up flow | HIGH | End Call button (or beforeunload) → anamClient.stopStreaming() → POST /api/analyze { sessionId } → update session to status: 'ended', ended_at: now() |
-| Greeting as a turn | MEDIUM | Save the initial greeting ("Hey! I'm Sarah from FlowDesk...") as an assistant turn in the turns table so it appears in the transcript |
-| Session timer | MEDIUM | 10-minute client-side timer that auto-ends the call. Every minute on Anam costs money. |
+| Hang-up flow | HIGH | End Call → anamClient.stopStreaming() → POST /api/analyze → mark session ended |
+| Greeting as a turn | MEDIUM | Save initial greeting as an assistant turn so it appears in transcript |
+| Session timer | MEDIUM | 10-minute auto-end to limit Anam costs |
 
 ### DevOps (2 remaining)
 
 | Item | Priority | What to do |
 |---|---|---|
-| Vercel deployment | HIGH | Deploy to Vercel, set env vars in Vercel dashboard, confirm preview deploys work on push |
-| Seed data | MEDIUM | Insert fake sessions/turns/leads/analyses into Supabase so the dashboard has data to show even before real calls |
+| Vercel deployment | HIGH | Deploy to Vercel, set env vars |
+| Seed data | MEDIUM | Insert fake sessions/turns/agents into Supabase for demo |
 
 ### Cleanup
 
 | Item | Priority |
 |---|---|
-| Remove @anthropic-ai/sdk or keep for later Anthropic switch | LOW |
+| Fix pre-existing playingVoiceId bug in agent-builder.tsx | LOW |
+| Remove @anthropic-ai/sdk or keep for later | LOW |
 
 ---
 

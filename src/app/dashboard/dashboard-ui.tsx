@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { avatarById } from "./mock-data";
 
@@ -10,21 +10,20 @@ export function AvatarPortrait({
   className?: string;
 }) {
   const avatar = avatarById(avatarId);
-  const column = avatar.atlasIndex % 4;
-  const row = Math.floor(avatar.atlasIndex / 4);
-  const style = {
-    "--atlas-x": `${(column / 3) * 100}%`,
-    "--atlas-y": `${row * 100}%`,
-  } as CSSProperties;
 
   return (
     <div
       className={`ruh-avatar-portrait ${className}`.trim()}
-      style={style}
       role="img"
       aria-label={`${avatar.name}, ${avatar.title}`}
     >
-      <span className="ruh-avatar-atlas-frame" aria-hidden="true" />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        className="ruh-avatar-real-image"
+        src={avatar.imageUrl}
+        alt={avatar.name}
+        loading="lazy"
+      />
     </div>
   );
 }

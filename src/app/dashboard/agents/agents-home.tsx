@@ -6,42 +6,65 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../dashboard-icons";
 import { AvatarPortrait, StatusBadge } from "../dashboard-ui";
 import { agents, avatars, type AvatarCategory, type AvatarProfile } from "../mock-data";
-import { readStoredAgents, type FrontendAgent } from "./agent-storage";
+import { readStoredAgents, removeStoredAgent, upsertStoredAgent, type FrontendAgent } from "./agent-storage";
 
 const filters: Array<"All" | AvatarCategory> = [
-  "All", "Sales", "Support", "Commerce", "Onboarding", "Hospitality", "Education",
+  "All", "Sales", "Support", "General",
 ];
 
 function AgentVisual({ agent }: { agent: FrontendAgent }) {
-  return agent.customAvatarDataUrl ? <Image className="ruh-avatar-portrait ruh-custom-avatar-image" src={agent.customAvatarDataUrl} alt={`${agent.name} avatar`} width={320} height={400} unoptimized /> : <AvatarPortrait avatarId={agent.avatarId} />;
+  const src = agent.avatarImageUrl ?? agent.customAvatarDataUrl ?? null;
+  return src
+    ? <Image className="ruh-avatar-portrait ruh-custom-avatar-image" src={src} alt={`${agent.name} avatar`} width={320} height={400} unoptimized />
+    : <AvatarPortrait avatarId={agent.avatarId} />;
 }
 
-function AgentCard({ agent }: { agent: FrontendAgent }) {
+function AgentCard({ agent, onDeleted }: { agent: FrontendAgent; onDeleted: (id: string) => void }) {
   const [status, setStatus] = useState(agent.status);
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [deleteState, setDeleteState] = useState<"idle" | "confirm" | "deleting">("idle");
   const isDraft = status === "Draft";
   const isPaused = status === "Paused";
+  const isRealAgent = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(agent.id);
 
   useEffect(() => {
     if (!menuOpen) return;
     const closeMenu = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMenuOpen(false);
+      if (event.key === "Escape") { setMenuOpen(false); setDeleteState("idle"); }
     };
     window.addEventListener("keydown", closeMenu);
     return () => window.removeEventListener("keydown", closeMenu);
   }, [menuOpen]);
 
   async function copyInstallCode() {
-    const code = `<script src="https://widget.ruhana.ai/v1.js" data-agent="${agent.id}"></script>`;
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const code = `<script src="${origin}/api/embed/${agent.id}" async></script>`;
     try { await navigator.clipboard.writeText(code); } catch { /* Local preview may block clipboard access. */ }
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1600);
   }
 
+  async function handleDelete() {
+    if (deleteState === "idle") { setDeleteState("confirm"); return; }
+    if (deleteState !== "confirm") return;
+    setDeleteState("deleting");
+    try {
+      if (isRealAgent) {
+        const res = await fetch(`/api/agents/${agent.id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error("Delete failed");
+      }
+      // Always remove from localStorage so it doesn't reappear on refresh
+      removeStoredAgent(agent.id);
+      onDeleted(agent.id);
+    } catch {
+      setDeleteState("idle");
+    }
+  }
+
   return (
     <article className="ruh-agent-card">
-      <Link className="ruh-agent-card-visual" href={`/dashboard/agents/${agent.id}`}>
+      <Link className="ruh-agent-card-visual" href={isDraft ? `/dashboard/agents/new?resume=${agent.id}` : `/dashboard/agents/${agent.id}`}>
         <AgentVisual agent={agent} />
         <StatusBadge status={status} />
       </Link>
@@ -52,10 +75,14 @@ function AgentCard({ agent }: { agent: FrontendAgent }) {
             <span aria-hidden="true">•••</span>
           </button>
           {menuOpen ? <div className="ruh-agent-card-menu" role="menu">
-            <Link href={`/dashboard/agents/${agent.id}`} role="menuitem" onClick={() => setMenuOpen(false)}>Open agent</Link>
+            <Link href={isDraft ? `/dashboard/agents/new?resume=${agent.id}` : `/dashboard/agents/${agent.id}`} role="menuitem" onClick={() => setMenuOpen(false)}>{isDraft ? "Continue setup" : "Open agent"}</Link>
             <Link href="/dashboard/conversations" role="menuitem" onClick={() => setMenuOpen(false)}>View conversations</Link>
             <button type="button" role="menuitem" onClick={copyInstallCode}>{copied ? "Install code copied" : "Copy install code"}</button>
-            {!isDraft ? <button type="button" role="menuitem" onClick={() => { setStatus(isPaused ? "Live" : "Paused"); setMenuOpen(false); }}>{isPaused ? "Resume agent" : "Pause agent"}</button> : null}
+            {!isDraft ? <button type="button" role="menuitem" onClick={async () => { const next = isPaused ? "Live" : "Paused"; setStatus(next); setMenuOpen(false); fetch(`/api/agents/${agent.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: next }) }).catch(() => {}); }}>{isPaused ? "Resume agent" : "Pause agent"}</button> : null}
+            <button type="button" role="menuitem" style={{ color: deleteState === "confirm" ? "#c00" : undefined }} disabled={deleteState === "deleting"} onClick={handleDelete}>
+              {deleteState === "deleting" ? "Deleting…" : deleteState === "confirm" ? "Confirm — this is permanent" : "Delete agent"}
+            </button>
+            {deleteState === "confirm" ? <button type="button" role="menuitem" onClick={() => setDeleteState("idle")}>Cancel</button> : null}
           </div> : null}
         </div>
         <p className="ruh-agent-domain">{agent.website}</p>
@@ -106,6 +133,7 @@ function AvatarCard({ avatar, onPreview }: { avatar: AvatarProfile; onPreview: (
 
 export function AgentsHome() {
   const [visibleAgents, setVisibleAgents] = useState<FrontendAgent[]>(agents);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<(typeof filters)[number]>("All");
   const [search, setSearch] = useState("");
   const [chooserOpen, setChooserOpen] = useState(false);
@@ -114,14 +142,41 @@ export function AgentsHome() {
   const restoreFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
+    async function loadAgents() {
+      try {
+        const res = await fetch("/api/agents");
+        if (res.ok) {
+          const dbAgents = await res.json();
+          const realAgents: FrontendAgent[] = Array.isArray(dbAgents) ? dbAgents.map((a: Record<string, unknown>) => ({
+            id: a.id as string,
+            name: a.name as string,
+            role: a.role as string,
+            website: (a.website as string) || "No website set",
+            status: (a.status as "Live" | "Draft" | "Paused") ?? "Draft",
+            avatarId: (a.avatar_id as string) ?? "sarah",
+            avatarImageUrl: (a.avatar_image_url as string) ?? undefined,
+            conversations: (a.conversations as number) ?? 0,
+            outcomes: (a.outcomes as number) ?? 0,
+            conversionRate: (a.conversionRate as string) ?? "—",
+            lastActive: (a.lastActive as string) ?? "No activity yet",
+          })) : [];
+
+          const stored = readStoredAgents();
+          const dbIds = new Set(realAgents.map((a) => a.id));
+          const unsavedDrafts = stored.filter((a) => !dbIds.has(a.id));
+          setVisibleAgents([...unsavedDrafts, ...realAgents]);
+          setLoading(false);
+          return;
+        }
+      } catch { /* fall through */ }
+
+      // Fallback: localStorage drafts only
       const stored = readStoredAgents();
-      const storedById = new Map(stored.map((agent) => [agent.id, agent]));
-      const mergedStatic = agents.map((agent) => storedById.get(agent.id) ?? agent);
-      const newAgents = stored.filter((agent) => !agents.some((item) => item.id === agent.id));
-      setVisibleAgents([...newAgents, ...mergedStatic]);
-    }, 0);
-    return () => window.clearTimeout(timer);
+      setVisibleAgents(stored);
+      setLoading(false);
+    }
+
+    loadAgents();
   }, []);
 
   useEffect(() => {
@@ -155,13 +210,37 @@ export function AgentsHome() {
         </button>
       </div>
 
-      <section className="ruh-agent-section" aria-labelledby="your-agents-title">
-        <div className="ruh-section-title-row">
-          <div><h2 id="your-agents-title">Your agents</h2><p>{visibleAgents.length} agents across your websites</p></div>
-          <Link href="/dashboard/conversations">View conversations</Link>
-        </div>
-        <div className="ruh-owned-agent-grid">{visibleAgents.map((agent) => <AgentCard agent={agent} key={agent.id} />)}</div>
-      </section>
+      {(loading || visibleAgents.length > 0) && (
+        <section className="ruh-agent-section" aria-labelledby="your-agents-title">
+          <div className="ruh-section-title-row">
+            <div>
+              <h2 id="your-agents-title">Your agents</h2>
+              <p>{loading ? "Loading your agents…" : `${visibleAgents.length} agent${visibleAgents.length === 1 ? "" : "s"} across your websites`}</p>
+            </div>
+            <Link href="/dashboard/conversations">View conversations</Link>
+          </div>
+          {loading ? (
+            <div className="ruh-owned-agent-grid">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="ruh-agent-card ruh-skeleton-card" aria-hidden="true">
+                  <div className="ruh-skeleton ruh-skeleton-visual" />
+                  <div className="ruh-agent-card-body">
+                    <div className="ruh-skeleton ruh-skeleton-title" />
+                    <div className="ruh-skeleton ruh-skeleton-subtitle" />
+                    <div className="ruh-skeleton ruh-skeleton-line" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="ruh-owned-agent-grid">
+              {visibleAgents.map((agent) => (
+                <AgentCard agent={agent} key={agent.id} onDeleted={(id) => setVisibleAgents((prev) => prev.filter((a) => a.id !== id))} />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="ruh-avatar-library" aria-labelledby="avatar-library-title">
         <div className="ruh-section-title-row ruh-library-heading">

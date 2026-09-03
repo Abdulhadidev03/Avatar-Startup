@@ -7,7 +7,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Icon } from "../../dashboard-icons";
 import { AvatarPortrait } from "../../dashboard-ui";
 import { avatars } from "../../mock-data";
-import { findStoredAgent, upsertStoredAgent, type FrontendAgent, type StoredBuilderState } from "../agent-storage";
+import { findStoredAgent, upsertStoredAgent, removeStoredAgent, type FrontendAgent, type StoredBuilderState } from "../agent-storage";
 
 type BuilderStep = 1 | 2 | 3 | 4;
 type ScanState = "idle" | "scanning" | "ready";
@@ -21,12 +21,15 @@ const steps: Array<{ number: BuilderStep; label: string }> = [
   { number: 4, label: "Widget & launch" },
 ];
 
-const voices = [
-  { id: "marin", name: "Marin", detail: "Warm · Natural", language: "English (US)" },
-  { id: "james", name: "James", detail: "Clear · Assured", language: "English (UK)" },
-  { id: "zara", name: "Zara", detail: "Bright · Conversational", language: "English (US)" },
-  { id: "sam", name: "Sam", detail: "Calm · Neutral", language: "Multilingual" },
-];
+type AnamVoice = {
+  id: string;
+  displayName: string;
+  gender: "MALE" | "FEMALE" | "NEUTRAL" | null;
+  country: string | null;
+  description: string | null;
+  previewSampleUrl: string | null;
+  displayTags: string[];
+};
 
 const actionOptions = [
   { id: "capture", title: "Capture contact details", description: "Collect a visitor’s name and email with permission.", ready: true },
@@ -79,11 +82,12 @@ export function AgentBuilder({ initialAvatarId, initialSource, resumeAgentId }: 
   const [language, setLanguage] = useState("English");
   const [scanState, setScanState] = useState<ScanState>(resumeMode ? "ready" : "idle");
   const [avatarSource, setAvatarSource] = useState<AvatarSource>(initialSource);
-  const [avatarId, setAvatarId] = useState(initialAvatarId && avatars.some((avatar) => avatar.id === initialAvatarId) ? initialAvatarId : "aria");
+  const [avatarId, setAvatarId] = useState(initialAvatarId && avatars.some((avatar) => avatar.id === initialAvatarId) ? initialAvatarId : avatars[0]?.id ?? "sarah");
   const [customPreview, setCustomPreview] = useState<string | null>(null);
   const [customFileName, setCustomFileName] = useState("");
+  const customFileRef = useRef<File | null>(null);
   const [consent, setConsent] = useState(false);
-  const [voiceId, setVoiceId] = useState("marin");
+  const [voiceId, setVoiceId] = useState("");
   const [greeting, setGreeting] = useState("Hi! I’m here if you’d like help finding the right option.");
   const [tone, setTone] = useState("Warm and professional");
   const [responseLength, setResponseLength] = useState("Balanced");
@@ -96,8 +100,14 @@ export function AgentBuilder({ initialAvatarId, initialSource, resumeAgentId }: 
   const [installMethod, setInstallMethod] = useState("JavaScript");
   const [previewOpen, setPreviewOpen] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
+  const [voices, setVoices] = useState<AnamVoice[]>([]);
+  const [voicesLoading, setVoicesLoading] = useState(true);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [launchState, setLaunchState] = useState<LaunchState>("draft");
   const [launchedAgentId, setLaunchedAgentId] = useState(resumeAgentId ?? "");
+  const [profileId, setProfileId] = useState<string | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
   const [saveLabel, setSaveLabel] = useState("All changes saved");
   const [createdAt] = useState(() => new Date().toISOString());
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -106,7 +116,8 @@ export function AgentBuilder({ initialAvatarId, initialSource, resumeAgentId }: 
 
   const selectedAvatar = useMemo(() => avatars.find((avatar) => avatar.id === avatarId) ?? avatars[0], [avatarId]);
   const displayName = agentName.trim() || selectedAvatar.name;
-  const embedCode = `<script src="https://widget.ruhana.ai/v1.js" data-agent="${storageId}"></script>`;
+  const appOrigin = typeof window !== "undefined" ? window.location.origin : "";
+  const embedCode = `<script src="${appOrigin}/api/embed/${launchedAgentId || storageId}" async></script>`;
 
   const builderState = useMemo<StoredBuilderState>(() => ({
     step,
@@ -153,6 +164,28 @@ export function AgentBuilder({ initialAvatarId, initialSource, resumeAgentId }: 
     builderState,
   }), [storageId, displayName, purpose, website, avatarId, maxVisited, avatarSource, customPreview, createdAt, builderState]);
 
+  // Fetch real Anam voices on mount
+  useEffect(() => {
+    fetch("/api/voices?perPage=50")
+      .then((r) => r.json())
+      .then((json) => {
+        if (Array.isArray(json.data)) {
+          setVoices(json.data);
+          // Auto-select the first voice if none is set yet
+          if (!voiceId && json.data.length > 0) {
+            setVoiceId(json.data[0].id);
+          }
+        }
+      })
+      .catch(() => {/* silently degrade */})
+      .finally(() => setVoicesLoading(false));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => { audioRef.current?.pause(); };
+  }, []);
+
   useEffect(() => {
     if (!resumeAgentId) {
       hydratedRef.current = true;
@@ -188,23 +221,159 @@ export function AgentBuilder({ initialAvatarId, initialSource, resumeAgentId }: 
   function goForward(next: BuilderStep) { setMaxVisited((current) => Math.max(current, next) as BuilderStep); setStep(next); markSaving(); document.getElementById("dashboard-content")?.scrollTo({ top: 0, behavior: "smooth" }); }
   function scanWebsite() {
     if (!website.trim() || scanState === "scanning") return;
-    setScanState("scanning"); setSaveLabel("Learning from your website…");
-    window.setTimeout(() => {
-      setScanState("ready"); setSources([{ id: "site", name: website.replace(/^https?:\/\//, ""), detail: "24 pages ready", enabled: true }]);
-      if (!agentName.trim()) setAgentName(`${selectedAvatar.name} ${purpose === "support" ? "Support" : "Guide"}`);
-      goForward(2);
-    }, 900);
+    setScanState("scanning");
+    setScanError(null);
+
+    // Move the user forward immediately — don't block them
+    goForward(2);
+
+    // Run the crawl in the background
+    const rawUrl = website.trim();
+    const fullUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+
+    fetch("/api/ingest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: fullUrl }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error ?? `Scan failed (${res.status})`);
+        }
+        return res.json();
+      })
+      .then((data) => {
+        setProfileId(data.profileId ?? null);
+        const pageCount = data.pageCount ?? "several";
+        setSources([{
+          id: "site",
+          name: website.replace(/^https?:\/\//, ""),
+          detail: `${pageCount} pages ready`,
+          enabled: true,
+        }]);
+        if (!agentName.trim()) {
+          setAgentName(data.companyName
+            ? `${data.companyName} ${purpose === "support" ? "Support" : "Guide"}`
+            : `${selectedAvatar.name} ${purpose === "support" ? "Support" : "Guide"}`);
+        }
+        setScanState("ready");
+      })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : "Could not reach the website.";
+        setScanError(msg);
+        setScanState("idle");
+      });
   }
-  function handlePhoto(file?: File) { if (!file) return; if (customPreview) URL.revokeObjectURL(customPreview); setCustomPreview(URL.createObjectURL(file)); setCustomFileName(file.name); markSaving(); }
+  function handlePhoto(file?: File) {
+    if (!file) return;
+    customFileRef.current = file;
+    setCustomFileName(file.name);
+    markSaving();
+    // Read as base64 so the preview survives navigation (blob URLs die on page leave)
+    const reader = new FileReader();
+    reader.onload = (e) => setCustomPreview(e.target?.result as string ?? null);
+    reader.readAsDataURL(file);
+  }
   function addKnowledgeFile(file?: File) { if (!file) return; setSources((current) => [...current, { id: `file-${Date.now()}`, name: file.name, detail: "Ready", enabled: true }]); markSaving(); }
-  function previewVoice(id: string) { setPlayingVoiceId(id); window.setTimeout(() => setPlayingVoiceId((current) => current === id ? null : current), 1200); }
+  function previewVoice(id: string) {
+    // Stop current playback
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+
+    if (playingVoiceId === id) { setPlayingVoiceId(null); return; }
+
+    const voice = voices.find((v) => v.id === id);
+    const url = voice?.previewSampleUrl;
+    if (!url) return;
+
+    const audio = new Audio(url);
+    audioRef.current = audio;
+    audio.onended = () => { setPlayingVoiceId(null); audioRef.current = null; };
+    audio.onerror = () => { setPlayingVoiceId(null); audioRef.current = null; };
+    setPlayingVoiceId(id);
+    audio.play().catch(() => setPlayingVoiceId(null));
+  }
   async function copyCode() { try { await navigator.clipboard.writeText(embedCode); } catch { /* Clipboard permissions are optional in preview. */ } setCopied(true); window.setTimeout(() => setCopied(false), 1800); }
-  function launchAgent() { setLaunchState("launching"); window.setTimeout(() => setLaunchState("live"), 800); }
+  async function launchAgent() {
+    setLaunchState("launching");
+    try {
+      // Upload custom photo to Supabase Storage + create Anam avatar
+      let avatarImageUrl: string | null = null;
+      let customAnamAvatarId: string | null = null;
+      if (avatarSource === "custom" && customFileRef.current) {
+        const form = new FormData();
+        form.append("file", customFileRef.current);
+        form.append("displayName", displayName || "Custom Avatar");
+        const uploadRes = await fetch("/api/agents/upload-avatar", { method: "POST", body: form });
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          avatarImageUrl = uploadData.url ?? null;
+          customAnamAvatarId = uploadData.anamAvatarId ?? null;
+        }
+      }
+
+      const selectedAvatarData = avatars.find((a) => a.id === avatarId);
+      // If custom photo was uploaded and Anam created an avatar, use that ID;
+      // otherwise fall back to the stock avatar's Anam ID
+      const finalAnamAvatarId = customAnamAvatarId ?? selectedAvatarData?.anamAvatarId ?? null;
+
+      const res = await fetch("/api/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: displayName,
+          role: purpose === "support" ? "Customer support" : purpose === "both" ? "Sales & support" : "Sales concierge",
+          website: website.replace(/^https?:\/\//, ""),
+          status: "Live",
+          avatarId,
+          anamAvatarId: finalAnamAvatarId,
+          anamVoiceId: voiceId || null,
+          avatarImageUrl,
+          greeting,
+          tone,
+          responseLength,
+          instructions,
+          language,
+          purpose,
+          profileId,
+        }),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setLaunchedAgentId(saved.id);
+        // Remove the draft from localStorage now that it's persisted in DB
+        removeStoredAgent(storageId);
+      }
+    } catch {
+      // Save locally as fallback
+    }
+    setLaunchState("live");
+  }
 
   return (
     <div className="ruh-page-stack ruh-agent-builder">
-      <BuilderHeader step={step} />
+      <BuilderHeader step={step} onSaveExit={() => router.push("/dashboard/agents")} />
       <Progress step={step} maxVisited={maxVisited} onStep={setStep} />
+
+      {/* Background scan status — shows across all steps */}
+      {scanState === "scanning" && step > 1 ? (
+        <div className="ruh-scan-banner" role="status">
+          <span className="ruh-progress-spinner" />
+          <span>Learning from your website — you can keep building while this runs.</span>
+        </div>
+      ) : null}
+      {scanState === "ready" && step > 1 && step < 4 ? (
+        <div className="ruh-scan-banner ruh-scan-banner--done">
+          <Icon name="check" width="14" height="14" />
+          <span>Website scanned — business profile ready.</span>
+        </div>
+      ) : null}
+      {scanError && step > 1 ? (
+        <div className="ruh-scan-banner ruh-scan-banner--error">
+          <span>Scan failed: {scanError}</span>
+          <button type="button" onClick={() => { setScanError(null); setScanState("idle"); setStep(1); }}>Fix URL</button>
+        </div>
+      ) : null}
 
       {step === 1 ? <section className="ruh-builder-surface" aria-labelledby="builder-step-one">
         <div className="ruh-builder-intro"><p className="ruh-kicker">Start with the essentials</p><h2 id="builder-step-one">Where will this agent work?</h2><p>Ruhana uses your website to prepare useful knowledge and page-aware guidance automatically.</p></div>
@@ -215,9 +384,9 @@ export function AgentBuilder({ initialAvatarId, initialSource, resumeAgentId }: 
           <label className="ruh-form-field"><span>Most important result</span><select value={outcome} onChange={(event) => setOutcome(event.target.value)}><option>Help visitors purchase</option><option>Capture qualified leads</option><option>Book meetings</option><option>Resolve support questions</option><option>Guide product onboarding</option></select></label>
           <label className="ruh-form-field"><span>Main language</span><select value={language} onChange={(event) => setLanguage(event.target.value)}><option>English</option><option>Spanish</option><option>Arabic</option><option>Urdu</option><option>French</option><option>German</option></select></label>
         </div>
-        {scanState === "scanning" ? <div className="ruh-inline-progress" role="status"><span className="ruh-progress-spinner" /><div><strong>Learning from your website</strong><small>Finding products, services, policies, and useful pages.</small></div></div> : null}
-        {scanState === "ready" ? <div className="ruh-inline-success"><Icon name="check" width="17" height="17" /><div><strong>Website ready</strong><small>24 pages found and prepared for review.</small></div></div> : null}
-        <div className="ruh-builder-footer"><span>{saveLabel}</span><button className="ruh-primary-button" type="button" disabled={!website.trim() || scanState === "scanning"} onClick={() => scanState === "ready" ? goForward(2) : scanWebsite()}>{scanState === "scanning" ? "Scanning website…" : scanState === "ready" ? "Continue" : "Scan website & continue"}<Icon name="arrow" width="15" height="15" /></button></div>
+        {scanState === "ready" ? <div className="ruh-inline-success"><Icon name="check" width="17" height="17" /><div><strong>Website ready</strong><small>Pages scanned and business profile created.</small></div></div> : null}
+        {scanError ? <div className="ruh-inline-error" role="alert"><div><strong>Scan failed</strong><small>{scanError}</small></div></div> : null}
+        <div className="ruh-builder-footer"><span>{saveLabel}</span><button className="ruh-primary-button" type="button" disabled={!website.trim()} onClick={() => scanState === "ready" ? goForward(2) : scanWebsite()}>{scanState === "ready" ? "Continue" : "Scan website & continue"}<Icon name="arrow" width="15" height="15" /></button></div>
       </section> : null}
 
       {step === 2 ? <section className="ruh-builder-surface ruh-look-step" aria-labelledby="builder-step-two">
@@ -226,7 +395,23 @@ export function AgentBuilder({ initialAvatarId, initialSource, resumeAgentId }: 
         {avatarSource === "library" ? <div className="ruh-builder-avatar-grid">{avatars.map((avatar) => <button className={avatar.id === avatarId ? "is-selected" : ""} type="button" onClick={() => { setAvatarId(avatar.id); markSaving(); }} aria-pressed={avatar.id === avatarId} key={avatar.id}><AvatarPortrait avatarId={avatar.id} /><span><strong>{avatar.name}</strong><small>{avatar.title}</small></span>{avatar.id === avatarId ? <i><Icon name="check" width="13" height="13" /></i> : null}</button>)}</div> : <div className="ruh-custom-upload-area"><input ref={uploadRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => handlePhoto(event.target.files?.[0])} hidden />{customPreview ? <div className="ruh-uploaded-photo"><Image src={customPreview} alt="Uploaded avatar preview" width={160} height={200} unoptimized /><div><strong>{customFileName}</strong><small>Photo ready for avatar creation</small><button type="button" onClick={() => uploadRef.current?.click()}>Choose another photo</button></div></div> : <button className="ruh-upload-dropzone" type="button" onClick={() => uploadRef.current?.click()}><span><Icon name="plus" width="22" height="22" /></span><strong>Upload a clear portrait</strong><small>JPG, PNG, or WebP. Face the camera with even lighting.</small></button>}<label className="ruh-consent-check"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} /><span>I have permission to create and use an avatar from this image.</span></label></div>}
         <div className="ruh-builder-divider" />
         <div className="ruh-subsection-heading"><div><h3>Choose a voice</h3><p>Preview voices later; the selected voice is used in the live test.</p></div><span>{language}</span></div>
-        <div className="ruh-voice-grid">{voices.map((voice) => <label className={voiceId === voice.id ? "is-selected" : ""} key={voice.id}><input type="radio" name="voice" checked={voiceId === voice.id} onChange={() => { setVoiceId(voice.id); markSaving(); }} /><button type="button" aria-label={`${playingVoiceId === voice.id ? "Stop" : "Preview"} ${voice.name} voice`} aria-pressed={playingVoiceId === voice.id} onClick={(event) => { event.preventDefault(); previewVoice(voice.id); }}>{playingVoiceId === voice.id ? "■" : "▶"}</button><span><strong>{voice.name}</strong><small>{voice.detail}</small></span><em>{voice.language}</em></label>)}</div>
+        {voicesLoading ? (
+          <p className="ruh-voices-loading">Loading voices…</p>
+        ) : (
+          <div className="ruh-voice-grid">{voices.map((voice) => {
+            const label = voice.displayName;
+            const detail = [voice.description?.split(".")[0], voice.country ? `· ${voice.country}` : ""].filter(Boolean).join(" ");
+            const lang = voice.gender ? (voice.gender === "FEMALE" ? "Female" : voice.gender === "MALE" ? "Male" : "Neutral") : "";
+            return (
+              <label className={voiceId === voice.id ? "is-selected" : ""} key={voice.id}>
+                <input type="radio" name="voice" checked={voiceId === voice.id} onChange={() => { setVoiceId(voice.id); markSaving(); }} />
+                <button type="button" aria-label={`${playingVoiceId === voice.id ? "Stop" : "Preview"} ${label} voice`} aria-pressed={playingVoiceId === voice.id} onClick={(event) => { event.preventDefault(); previewVoice(voice.id); }}>{playingVoiceId === voice.id ? "■" : "▶"}</button>
+                <span><strong>{label}</strong><small>{detail}</small></span>
+                <em>{lang}</em>
+              </label>
+            );
+          })}</div>
+        )}
         <label className="ruh-form-field ruh-full-field"><span>Welcome message</span><textarea rows={3} value={greeting} onChange={(event) => setGreeting(event.target.value)} /><small>This is the first thing visitors hear or read.</small></label>
         <div className="ruh-builder-footer"><button className="ruh-secondary-button" type="button" onClick={() => setStep(1)}>Back</button><span>{saveLabel}</span><button className="ruh-primary-button" type="button" disabled={avatarSource === "custom" && (!customPreview || !consent)} onClick={() => goForward(3)}>Use this look & continue<Icon name="arrow" width="15" height="15" /></button></div>
       </section> : null}
@@ -239,7 +424,7 @@ export function AgentBuilder({ initialAvatarId, initialSource, resumeAgentId }: 
         <div className="ruh-builder-footer"><button className="ruh-secondary-button" type="button" onClick={() => setStep(2)}>Back</button><span>{saveLabel}</span><button className="ruh-primary-button" type="button" onClick={() => goForward(4)}>Prepare my agent<Icon name="arrow" width="15" height="15" /></button></div>
       </section> : null}
 
-      {step === 4 ? <section className="ruh-builder-surface ruh-launch-step" aria-labelledby="builder-step-four">{launchState === "live" ? <div className="ruh-launch-success"><span><Icon name="check" width="25" height="25" /></span><p className="ruh-kicker">Agent live</p><h2>{displayName} is ready to welcome visitors</h2><p>Your agent is published with its avatar, knowledge, actions, and website context.</p><div><Link className="ruh-primary-button" href="/dashboard/agents/northstar-sales">View agent</Link><button className="ruh-secondary-button" type="button" onClick={() => setLaunchState("draft")}>Return to setup</button></div></div> : <>
+      {step === 4 ? <section className="ruh-builder-surface ruh-launch-step" aria-labelledby="builder-step-four">{launchState === "live" ? <div className="ruh-launch-success"><span><Icon name="check" width="25" height="25" /></span><p className="ruh-kicker">Agent live</p><h2>{displayName} is ready to welcome visitors</h2><p>Your agent is published with its avatar, knowledge, actions, and website context.</p><div><Link className="ruh-primary-button" href={`/dashboard/agents/${launchedAgentId || "northstar-sales"}`}>View agent</Link><button className="ruh-secondary-button" type="button" onClick={() => setLaunchState("draft")}>Return to setup</button></div></div> : <>
         <div className="ruh-builder-intro"><p className="ruh-kicker">Preview and deploy</p><h2 id="builder-step-four">Make it feel at home on your website</h2><p>Adjust the widget, copy one small code snippet, and launch when you are ready.</p></div>
         <div className="ruh-launch-layout"><div className="ruh-widget-controls">
           <div className="ruh-builder-section-block"><div className="ruh-subsection-heading"><div><h3>Widget appearance</h3><p>A quiet default that keeps your website in focus.</p></div></div><div className="ruh-control-pair"><label className="ruh-form-field"><span>Position</span><select value={widgetPosition} onChange={(event) => setWidgetPosition(event.target.value as "left" | "right")}><option value="right">Bottom right</option><option value="left">Bottom left</option></select></label><label className="ruh-form-field"><span>Appearance</span><select value={widgetTheme} onChange={(event) => setWidgetTheme(event.target.value as "light" | "dark")}><option value="light">Light</option><option value="dark">Dark</option></select></label></div><label className="ruh-setting-row"><span><strong>Open with a greeting</strong><small>Invite visitors after a short delay.</small></span><span className="ruh-switch"><input type="checkbox" checked={autoOpen} onChange={(event) => setAutoOpen(event.target.checked)} /><i /></span></label></div>

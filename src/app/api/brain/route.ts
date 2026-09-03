@@ -6,7 +6,8 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
-const BASE_PROMPT = `You are Sarah, a friendly and professional AI sales representative.
+const BASE_PROMPT_TEMPLATE = (agentName: string) =>
+  `You are ${agentName}, a friendly and professional AI sales representative.
 
 RULES:
 - Keep responses SHORT — 1-3 sentences max. This is a live voice call, not a blog post.
@@ -21,9 +22,20 @@ LEAD CAPTURE:
 - Don't be pushy — weave it in naturally, like "By the way, I'd love to send you more details — what's a good email for you?"
 - If they give their email, confirm it back to them.`;
 
-function buildSystemPrompt(profileText?: string): string {
-  if (!profileText) return BASE_PROMPT;
-  return `${BASE_PROMPT}\n\nBUSINESS CONTEXT (use this to answer questions about the company):\n${profileText}`;
+function buildSystemPrompt(
+  agentName: string,
+  profileText?: string,
+  customInstructions?: string,
+  knowledgeTexts?: string[],
+): string {
+  let prompt = BASE_PROMPT_TEMPLATE(agentName);
+  if (customInstructions) prompt += `\n\nADDITIONAL INSTRUCTIONS:\n${customInstructions}`;
+  if (profileText) prompt += `\n\nBUSINESS CONTEXT (use this to answer questions about the company):\n${profileText}`;
+  if (knowledgeTexts?.length) {
+    prompt += `\n\nKNOWLEDGE BASE (use this information to answer visitor questions accurately):\n`;
+    prompt += knowledgeTexts.join("\n\n---\n\n");
+  }
+  return prompt;
 }
 
 export async function POST(req: Request) {
@@ -44,21 +56,62 @@ export async function POST(req: Request) {
       content: userText,
     });
 
-    // Load the business profile for this session (if linked)
+    // Load session → agent → profile chain
     const { data: session } = await supabaseAdmin
       .from("sessions")
-      .select("profile_id")
+      .select("profile_id, agent_id")
       .eq("id", sessionId)
       .single();
 
+    let agentName = "Sarah";
+    let customInstructions: string | undefined;
+    let profileId = session?.profile_id;
+
+    if (session?.agent_id) {
+      const { data: agent } = await supabaseAdmin
+        .from("agents")
+        .select("name, instructions, profile_id")
+        .eq("id", session.agent_id)
+        .single();
+      if (agent) {
+        agentName = agent.name;
+        customInstructions = agent.instructions ?? undefined;
+        if (!profileId && agent.profile_id) profileId = agent.profile_id;
+      }
+    }
+
     let profileText: string | undefined;
-    if (session?.profile_id) {
+    if (profileId) {
       const { data: profile } = await supabaseAdmin
         .from("profiles")
         .select("profile_text")
-        .eq("id", session.profile_id)
+        .eq("id", profileId)
         .single();
       profileText = profile?.profile_text ?? undefined;
+    }
+
+    // Fetch enabled knowledge sources for this agent
+    let knowledgeTexts: string[] = [];
+    if (session?.agent_id) {
+      const { data: sources } = await supabaseAdmin
+        .from("knowledge_sources")
+        .select("name, content_text")
+        .eq("agent_id", session.agent_id)
+        .eq("enabled", true)
+        .not("content_text", "is", null);
+
+      if (sources?.length) {
+        // Cap total knowledge to ~30k chars so we don't blow the context window
+        let totalChars = 0;
+        const MAX_KNOWLEDGE_CHARS = 30_000;
+        for (const src of sources) {
+          if (totalChars >= MAX_KNOWLEDGE_CHARS) break;
+          const text = src.content_text as string;
+          const slice = text.slice(0, MAX_KNOWLEDGE_CHARS - totalChars);
+          knowledgeTexts.push(`[${src.name}]\n${slice}`);
+          totalChars += slice.length;
+        }
+      }
     }
 
     // Fetch conversation history for context
@@ -80,14 +133,18 @@ export async function POST(req: Request) {
       model: "qwen/qwen3.8-27b",
       max_tokens: 200,
       messages: [
-        { role: "system", content: buildSystemPrompt(profileText) },
+        { role: "system", content: buildSystemPrompt(agentName, profileText, customInstructions, knowledgeTexts) },
         ...messages,
       ],
     });
 
-    const replyText =
+    let rawReply =
       response.choices[0]?.message?.content ??
       "Sorry, I didn't catch that. Could you say that again?";
+
+    // Strip <think>…</think> blocks that reasoning models like Qwen emit
+    const replyText = rawReply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim()
+      || "Sorry, I didn't catch that. Could you say that again?";
 
     // Detect if a lead was captured (email mentioned)
     const emailRegex = /[\w.-]+@[\w.-]+\.\w{2,}/;

@@ -152,10 +152,12 @@ export default function WebsitesPage() {
     websites.find((website) => website.id === selectedId) ?? websites[0];
   const assignedAgent = agents.find((agent) => agent.id === selectedWebsite.agentId) ?? null;
   const eligibleAgent = assignedAgent?.status === "Live";
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
   const snippet = useMemo(
-    () =>
-      `<script async src="https://cdn.ruhana.ai/widget.js" data-site="${selectedWebsite.id}" data-agent="${assignedAgent?.id ?? "assign-an-agent"}"></script>`,
-    [assignedAgent?.id, selectedWebsite.id],
+    () => assignedAgent?.id
+      ? `<script src="${origin}/api/embed/${assignedAgent.id}" async></script>`
+      : `<!-- Assign an agent first, then copy the install code -->`,
+    [assignedAgent?.id, origin],
   );
 
   async function copySnippet() {

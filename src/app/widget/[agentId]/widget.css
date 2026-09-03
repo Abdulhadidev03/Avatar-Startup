@@ -1,0 +1,131 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --wgt-accent: #2563eb;
+  --wgt-bg: #ffffff;
+  --wgt-surface: #f8fafc;
+  --wgt-border: #e2e8f0;
+  --wgt-ink: #0f172a;
+  --wgt-ink2: #64748b;
+  --wgt-radius: 16px;
+  --wgt-shadow: 0 8px 32px rgba(0,0,0,0.18);
+}
+
+/* Force full height chain from html → body → layout → root */
+html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: transparent; }
+.wgt-layout-root { height: 100vh; display: flex; flex-direction: column; }
+
+/* ── Root shell ── */
+.wgt-root {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  background: var(--wgt-bg);
+  overflow: hidden;
+}
+
+/* ── Header ── */
+.wgt-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--wgt-bg);
+  flex-shrink: 0;
+  z-index: 2;
+}
+.wgt-header-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #94a3b8;
+  flex-shrink: 0;
+}
+.wgt-header-dot[data-status="connecting"] { background: #f59e0b; animation: wgt-pulse 1s ease-in-out infinite; }
+.wgt-header-dot[data-status="connected"]  { background: #22c55e; }
+.wgt-header-dot[data-status="ended"]      { background: #94a3b8; }
+.wgt-header-dot[data-status="error"]      { background: #ef4444; }
+@keyframes wgt-pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+
+.wgt-header-name {
+  font-weight: 650;
+  font-size: 14px;
+  color: var(--wgt-ink);
+}
+.wgt-header-status {
+  font-size: 12px;
+  color: var(--wgt-ink2);
+  flex: 1;
+}
+.wgt-close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--wgt-ink2);
+  padding: 4px 6px;
+  border-radius: 6px;
+  line-height: 1;
+}
+.wgt-close-btn:hover { background: var(--wgt-surface); color: var(--wgt-ink); }
+
+/* ── Video — fills all remaining space ── */
+.wgt-video-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: #0f172a;
+  overflow: hidden;
+}
+.wgt-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  position: absolute;
+  inset: 0;
+  image-rendering: auto;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+/* ── Overlays (connecting / ended / error) ── */
+.wgt-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(15,23,42,0.82);
+  color: #fff;
+  font-size: 14px;
+  text-align: center;
+  padding: 24px;
+  z-index: 1;
+}
+.wgt-overlay--error { background: rgba(127,29,29,0.85); }
+.wgt-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255,255,255,0.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: wgt-spin 800ms linear infinite;
+}
+@keyframes wgt-spin { to { transform: rotate(360deg); } }
+
+.wgt-restart-btn {
+  margin-top: 4px;
+  padding: 8px 18px;
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+.wgt-restart-btn:hover { background: rgba(255,255,255,0.25); }

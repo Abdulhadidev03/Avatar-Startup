@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
-  agents,
+  agents as mockAgents,
   funnel,
   intentSignals,
   objections,
@@ -22,7 +22,16 @@ import {
   type PeriodKey,
 } from "./analytics-data";
 
-type AgentFilter = "all" | (typeof agents)[number]["id"];
+type RealAnalytics = {
+  conversations: number;
+  outcomes: number;
+  leads: number;
+  minutes: number;
+  change: { conversations: number; outcomes: number; minutes: number };
+  agents: Array<{ id: string; name: string; role: string; status: string; conversations: number; outcomes: number; minutes: number }>;
+} | null;
+
+type AgentFilter = "all" | string;
 type SiteFilter = "all" | (typeof sites)[number]["id"];
 type TrendMetric = keyof typeof trendSeries;
 type OutcomeKind = "All" | "Sales" | "Support";
@@ -83,7 +92,7 @@ function getFilteredSnapshot(
   const snapshot = periodSnapshots[period];
   const base = periodSnapshots["30d"];
   const site = sites.find((item) => item.id === siteId);
-  const agent = agents.find((item) => item.id === agentId);
+  const agent = mockAgents.find((item) => item.id === agentId);
 
   if (site && agent && site.agentId !== agent.id) {
     return {
@@ -116,6 +125,7 @@ function AnalyticsFilters({
   onPeriodChange,
   onSiteChange,
   onAgentChange,
+  agentList,
 }: {
   period: PeriodKey;
   site: SiteFilter;
@@ -123,6 +133,7 @@ function AnalyticsFilters({
   onPeriodChange: (period: PeriodKey) => void;
   onSiteChange: (site: SiteFilter) => void;
   onAgentChange: (agent: AgentFilter) => void;
+  agentList: readonly { id: string; name: string; role: string }[];
 }) {
   const hasFilters = period !== "30d" || site !== "all" || agent !== "all";
 
@@ -170,7 +181,7 @@ function AnalyticsFilters({
             onChange={(event) => onAgentChange(event.target.value as AgentFilter)}
           >
             <option value="all">All agents</option>
-            {agents.map((item) => (
+            {agentList.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.name} · {item.role}
               </option>
@@ -364,17 +375,19 @@ function Overview({
   agentFilter,
   period,
   siteFilter,
+  agentList,
 }: {
   metrics: MetricSnapshot;
   agentFilter: AgentFilter;
   period: PeriodKey;
   siteFilter: SiteFilter;
+  agentList: readonly { id: string; name: string; role: string; status: string; conversations: number; outcomes: number; revenue: number; minutes?: number }[];
 }) {
   const [trendMetric, setTrendMetric] = useState<TrendMetric>("revenue");
   const periodSnapshot = periodSnapshots[period];
   const baseSnapshot = periodSnapshots["30d"];
   const selectedSite = sites.find((site) => site.id === siteFilter);
-  const visibleAgents = agents.filter(
+  const visibleAgents = agentList.filter(
     (item) =>
       (agentFilter === "all" || item.id === agentFilter) &&
       (!selectedSite || selectedSite.agentId === item.id),
@@ -708,18 +721,20 @@ function Usage({
   period,
   siteFilter,
   agentFilter,
+  agentList,
 }: {
   metrics: MetricSnapshot;
   period: PeriodKey;
   siteFilter: SiteFilter;
   agentFilter: AgentFilter;
+  agentList: readonly { id: string; name: string; role: string; status: string; conversations: number; outcomes: number; revenue: number; minutes?: number }[];
 }) {
   const [trendMetric, setTrendMetric] = useState<TrendMetric>("minutes");
   const allowance = 10000;
   const usagePercent = (metrics.minutes / allowance) * 100;
   const displayedUsagePercent = Math.min(100, usagePercent);
   const selectedSite = sites.find((site) => site.id === siteFilter);
-  const visibleAgents = agents.filter(
+  const visibleAgents = agentList.filter(
     (item) =>
       (agentFilter === "all" || item.id === agentFilter) &&
       (!selectedSite || selectedSite.agentId === item.id),
@@ -806,8 +821,8 @@ function Usage({
               </span>
               <div>
                 <span><small>Conversations</small><strong>{formatNumber(agent.conversations * conversationPeriodScale)}</strong></span>
-                <span><small>Minutes</small><strong>{formatNumber(agent.minutes * minutePeriodScale)}</strong></span>
-                <span><small>Share</small><strong>{((agent.minutes / periodSnapshots["30d"].minutes) * 100).toFixed(1)}%</strong></span>
+                <span><small>Minutes</small><strong>{formatNumber((agent.minutes ?? 0) * minutePeriodScale)}</strong></span>
+                <span><small>Share</small><strong>{(((agent.minutes ?? 0) / periodSnapshots["30d"].minutes) * 100).toFixed(1)}%</strong></span>
               </div>
             </article>
           ))}
@@ -844,8 +859,47 @@ export function AnalyticsDashboard({ view }: { view: AnalyticsView }) {
   const [period, setPeriod] = useState<PeriodKey>("30d");
   const [site, setSite] = useState<SiteFilter>("all");
   const [agent, setAgent] = useState<AgentFilter>("all");
+  const [realData, setRealData] = useState<RealAnalytics>(null);
   const content = pageContent[view];
-  const metrics = useMemo(() => getFilteredSnapshot(period, site, agent), [period, site, agent]);
+
+  useEffect(() => {
+    async function loadAnalytics() {
+      try {
+        const res = await fetch(`/api/analytics?period=${period}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.conversations > 0 || data.agents?.length > 0) {
+            setRealData(data);
+          }
+        }
+      } catch {
+        // Use mock data
+      }
+    }
+    loadAnalytics();
+  }, [period]);
+
+  const metrics = useMemo(() => {
+    if (realData) {
+      return {
+        revenue: 0,
+        outcomes: realData.outcomes,
+        conversations: realData.conversations,
+        minutes: realData.minutes,
+        change: {
+          revenue: 0,
+          outcomes: realData.change.outcomes,
+          conversations: realData.change.conversations,
+          minutes: realData.change.minutes,
+        },
+      } satisfies MetricSnapshot;
+    }
+    return getFilteredSnapshot(period, site, agent);
+  }, [realData, period, site, agent]);
+
+  const agents = realData?.agents?.length
+    ? realData.agents.map((a) => ({ ...a, revenue: 0 }))
+    : mockAgents;
 
   return (
     <div className="ruh-page-stack ruh-analytics-page">
@@ -868,13 +922,14 @@ export function AnalyticsDashboard({ view }: { view: AnalyticsView }) {
         onPeriodChange={setPeriod}
         onSiteChange={setSite}
         onAgentChange={setAgent}
+        agentList={agents}
       />
 
-      {view === "overview" ? <Overview metrics={metrics} agentFilter={agent} period={period} siteFilter={site} /> : null}
+      {view === "overview" ? <Overview metrics={metrics} agentFilter={agent} period={period} siteFilter={site} agentList={agents} /> : null}
       {view === "results" ? <Outcomes metrics={metrics} siteFilter={site} agentFilter={agent} /> : null}
       {view === "insights" ? <Insights metrics={metrics} period={period} siteFilter={site} agentFilter={agent} /> : null}
       {view === "usage" ? (
-        <Usage metrics={metrics} period={period} siteFilter={site} agentFilter={agent} />
+        <Usage metrics={metrics} period={period} siteFilter={site} agentFilter={agent} agentList={agents} />
       ) : null}
     </div>
   );
