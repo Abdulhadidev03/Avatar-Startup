@@ -1,3 +1,5 @@
+import { agents as dashboardAgents } from "../mock-data";
+
 export type AnalyticsView = "overview" | "results" | "insights" | "usage";
 
 export type PeriodKey = "7d" | "30d" | "90d";
@@ -45,41 +47,35 @@ export const periodSnapshots: Record<PeriodKey, MetricSnapshot> = {
   },
 };
 
-// No mock agents — real agents come from the /api/analytics endpoint
-export const agents: { id: string; name: string; role: string; status: string; conversations: number; outcomes: number; revenue: number; minutes: number }[] = [];
+// Agents come from the /api/analytics endpoint at runtime; mock data used as fallback
+const agentContribution: Record<string, { revenue: number; minutes: number }> = {
+  "northstar-sales": { revenue: 36620, minutes: 3180 },
+  "ruh-support": { revenue: 6240, minutes: 1640 },
+};
 
-export const sites = [
-  {
-    id: "northstar",
-    name: "Northstar",
-    domain: "northstar.com",
-    agentId: "northstar-sales",
-    conversations: 842,
-    outcomes: 196,
-    revenue: 36620,
-    minutes: 3180,
-  },
-  {
-    id: "help",
-    name: "Northstar Help",
-    domain: "help.northstar.com",
-    agentId: "ruh-support",
-    conversations: 442,
-    outcomes: 318,
-    revenue: 6240,
-    minutes: 1640,
-  },
-  {
-    id: "app",
-    name: "Northstar App",
-    domain: "app.northstar.com",
-    agentId: "onboarding-guide",
-    conversations: 0,
-    outcomes: 0,
-    revenue: 0,
-    minutes: 0,
-  },
-] as const;
+export const agents = dashboardAgents.map((agent) => ({
+  ...agent,
+  revenue: agentContribution[agent.id]?.revenue ?? 0,
+  minutes: agentContribution[agent.id]?.minutes ?? 0,
+}));
+
+const siteDefinitions = [
+  { id: "northstar", name: "Northstar", agentId: "northstar-sales" },
+  { id: "help", name: "Northstar Help", agentId: "ruh-support" },
+  { id: "app", name: "Northstar App", agentId: "onboarding-guide" },
+];
+
+export const sites = siteDefinitions.map((site) => {
+  const agent = agents.find((item) => item.id === site.agentId);
+  return {
+    ...site,
+    domain: agent?.website ?? "",
+    conversations: agent?.conversations ?? 0,
+    outcomes: agent?.outcomes ?? 0,
+    revenue: agent?.revenue ?? 0,
+    minutes: agent?.minutes ?? 0,
+  };
+});
 
 export const outcomeBreakdown = [
   { id: "sale", label: "Purchases assisted", value: 128, share: 24.9, kind: "Sales" },

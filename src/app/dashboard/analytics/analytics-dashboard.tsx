@@ -32,6 +32,7 @@ type RealAnalytics = {
 } | null;
 
 type AgentFilter = "all" | string;
+type AnalyticsAgent = (typeof mockAgents)[number];
 type SiteFilter = "all" | (typeof sites)[number]["id"];
 type TrendMetric = keyof typeof trendSeries;
 type OutcomeKind = "All" | "Sales" | "Support";
@@ -88,6 +89,7 @@ function getFilteredSnapshot(
   period: PeriodKey,
   siteId: SiteFilter,
   agentId: AgentFilter,
+  agentOptions: AnalyticsAgent[] = mockAgents,
 ): MetricSnapshot {
   const snapshot = periodSnapshots[period];
   const base = periodSnapshots["30d"];

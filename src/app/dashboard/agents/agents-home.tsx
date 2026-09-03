@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../dashboard-icons";
 import { AvatarPortrait, StatusBadge } from "../dashboard-ui";
 import { agents, avatars, type AvatarCategory, type AvatarProfile } from "../mock-data";
+import { useDialogFocus } from "../use-dialog-focus";
 import { readStoredAgents, removeStoredAgent, upsertStoredAgent, type FrontendAgent } from "./agent-storage";
 
 const filters: Array<"All" | AvatarCategory> = [
@@ -24,18 +25,31 @@ function AgentCard({ agent, onDeleted }: { agent: FrontendAgent; onDeleted: (id:
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [deleteState, setDeleteState] = useState<"idle" | "confirm" | "deleting">("idle");
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const isDraft = status === "Draft";
   const isPaused = status === "Paused";
   const isRealAgent = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(agent.id);
 
   useEffect(() => {
     if (!menuOpen) return;
+    const focusTimer = window.setTimeout(() => menuRef.current?.querySelector<HTMLElement>("a, button")?.focus(), 0);
     const closeMenu = (event: KeyboardEvent) => {
       if (event.key === "Escape") { setMenuOpen(false); setDeleteState("idle"); }
     };
+    const closeOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!menuRef.current?.contains(target) && !menuTriggerRef.current?.contains(target)) setMenuOpen(false);
+    };
     window.addEventListener("keydown", closeMenu);
-    return () => window.removeEventListener("keydown", closeMenu);
+    window.addEventListener("mousedown", closeOutside);
+    return () => { window.clearTimeout(focusTimer); window.removeEventListener("keydown", closeMenu); window.removeEventListener("mousedown", closeOutside); };
   }, [menuOpen]);
+
+  function updateStatus(nextStatus: FrontendAgent["status"]) {
+    setStatus(nextStatus);
+    upsertStoredAgent({ ...agent, status: nextStatus, lastActive: "Updated just now" });
+  }
 
   async function copyInstallCode() {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
@@ -71,10 +85,10 @@ function AgentCard({ agent, onDeleted }: { agent: FrontendAgent; onDeleted: (id:
       <div className="ruh-agent-card-body">
         <div className="ruh-agent-card-title-row">
           <div><h3>{agent.name}</h3><p>{agent.role}</p></div>
-          <button type="button" className="ruh-more-button" aria-label={`More options for ${agent.name}`} aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}>
+          <button ref={menuTriggerRef} type="button" className="ruh-more-button" aria-label={`More options for ${agent.name}`} aria-controls={`agent-actions-${agent.id}`} aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}>
             <span aria-hidden="true">•••</span>
           </button>
-          {menuOpen ? <div className="ruh-agent-card-menu" role="menu">
+          {menuOpen ? <div ref={menuRef} className="ruh-agent-card-menu" role="menu">
             <Link href={isDraft ? `/dashboard/agents/new?resume=${agent.id}` : `/dashboard/agents/${agent.id}`} role="menuitem" onClick={() => setMenuOpen(false)}>{isDraft ? "Continue setup" : "Open agent"}</Link>
             <Link href="/dashboard/conversations" role="menuitem" onClick={() => setMenuOpen(false)}>View conversations</Link>
             <button type="button" role="menuitem" onClick={copyInstallCode}>{copied ? "Install code copied" : "Copy install code"}</button>
@@ -99,7 +113,7 @@ function AgentCard({ agent, onDeleted }: { agent: FrontendAgent; onDeleted: (id:
         )}
         <div className="ruh-agent-card-footer">
           <span>{agent.lastActive}</span>
-          <Link className={isDraft || isPaused ? "ruh-primary-button" : "ruh-secondary-button"} href={isDraft ? `/dashboard/agents/new?resume=${agent.id}` : `/dashboard/agents/${agent.id}`}>
+          <Link className={isDraft || isPaused ? "ruh-primary-button" : "ruh-secondary-button"} href={isDraft ? `/dashboard/agents/new?resume=${agent.id}` : `/dashboard/agents/${agent.id}`} onClick={() => { if (isPaused) updateStatus("Live"); }}>
             {isDraft ? "Continue setup" : isPaused ? "Resume agent" : "Open agent"}
             <Icon name="arrow" width="14" height="14" />
           </Link>
@@ -138,8 +152,11 @@ export function AgentsHome() {
   const [search, setSearch] = useState("");
   const [chooserOpen, setChooserOpen] = useState(false);
   const [previewAvatar, setPreviewAvatar] = useState<AvatarProfile | null>(null);
-  const activeDialogRef = useRef<HTMLElement>(null);
-  const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const closeActiveDialog = useCallback(() => {
+    setChooserOpen(false);
+    setPreviewAvatar(null);
+  }, []);
+  const activeDialogRef = useDialogFocus(chooserOpen || Boolean(previewAvatar), closeActiveDialog);
 
   useEffect(() => {
     async function loadAgents() {
@@ -178,18 +195,6 @@ export function AgentsHome() {
 
     loadAgents();
   }, []);
-
-  useEffect(() => {
-    const dialogOpen = chooserOpen || Boolean(previewAvatar);
-    if (!dialogOpen) return;
-    restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const focusTimer = window.setTimeout(() => activeDialogRef.current?.querySelector<HTMLElement>("button, a, input")?.focus(), 0);
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { event.preventDefault(); setChooserOpen(false); setPreviewAvatar(null); }
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => { window.clearTimeout(focusTimer); window.removeEventListener("keydown", closeOnEscape); restoreFocusRef.current?.focus(); };
-  }, [chooserOpen, previewAvatar]);
 
   const visibleAvatars = useMemo(() => {
     const query = search.trim().toLowerCase();

@@ -1,7 +1,8 @@
 "use client";
 
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useState } from "react";
 import { PageHeader } from "../dashboard-ui";
+import { useDialogFocus } from "../use-dialog-focus";
 
 type SettingsTab = "Workspace" | "Team" | "Notifications" | "Data & privacy";
 type TeamRole = "Owner" | "Admin" | "Operator" | "Analyst";
@@ -56,13 +57,10 @@ export default function SettingsPage() {
   const [showDelete, setShowDelete] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
 
-  useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { setShowInvite(false); setShowDelete(false); }
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, []);
+  const closeInvite = useCallback(() => setShowInvite(false), []);
+  const closeDelete = useCallback(() => setShowDelete(false), []);
+  const inviteDialogRef = useDialogFocus(showInvite, closeInvite);
+  const deleteDialogRef = useDialogFocus(showDelete, closeDelete);
 
   function saveSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -142,7 +140,7 @@ export default function SettingsPage() {
               key={option}
               type="button"
               className={tab === option ? "is-active" : ""}
-              aria-current={tab === option ? "page" : undefined}
+              aria-pressed={tab === option}
               onClick={() => { setTab(option); setNotice(""); }}
             >
               {option}
@@ -288,26 +286,26 @@ export default function SettingsPage() {
       {dirty ? <div className="ruh-unsaved-bar" role="status"><span>You have unsaved changes.</span><button className="ruh-primary-button" type="submit" form="ruh-settings-form">Save changes</button></div> : null}
 
       {showInvite ? (
-        <div className="ruh-modal-backdrop" role="presentation" onMouseDown={() => setShowInvite(false)}>
-          <section className="ruh-modal-card" role="dialog" aria-modal="true" aria-labelledby="invite-title" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="ruh-modal-header"><div><p className="ruh-kicker">Team access</p><h2 id="invite-title">Invite a member</h2></div><button type="button" onClick={() => setShowInvite(false)} aria-label="Close dialog">×</button></div>
+        <div className="ruh-modal-backdrop" role="presentation" onMouseDown={closeInvite}>
+          <section ref={inviteDialogRef} className="ruh-modal-card" role="dialog" aria-modal="true" aria-labelledby="invite-title" tabIndex={-1} onMouseDown={(event) => event.stopPropagation()}>
+            <div className="ruh-modal-header"><div><p className="ruh-kicker">Team access</p><h2 id="invite-title">Invite a member</h2></div><button type="button" onClick={closeInvite} aria-label="Close dialog">×</button></div>
             <form className="ruh-settings-form" onSubmit={inviteMember}>
-              <label className="ruh-plain-field"><span>Email address</span><input type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="teammate@company.com" required /></label>
+              <label className="ruh-plain-field"><span>Email address</span><input data-autofocus type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="teammate@company.com" required /></label>
               <label className="ruh-plain-field"><span>Role</span><select value={inviteRole} onChange={(event) => setInviteRole(event.target.value as TeamRole)}><option>Admin</option><option>Operator</option><option>Analyst</option></select></label>
               <div className="ruh-role-note"><strong>{inviteRole}</strong><p>{inviteRole === "Admin" ? "Can manage agents, integrations, and team members." : inviteRole === "Operator" ? "Can manage conversations and configure agents." : "Can view analytics and export reports."}</p></div>
-              <div className="ruh-modal-actions"><button className="ruh-secondary-button" type="button" onClick={() => setShowInvite(false)}>Cancel</button><button className="ruh-primary-button" type="submit">Send invitation</button></div>
+              <div className="ruh-modal-actions"><button className="ruh-secondary-button" type="button" onClick={closeInvite}>Cancel</button><button className="ruh-primary-button" type="submit">Send invitation</button></div>
             </form>
           </section>
         </div>
       ) : null}
 
       {showDelete ? (
-        <div className="ruh-modal-backdrop" role="presentation" onMouseDown={() => setShowDelete(false)}>
-          <section className="ruh-modal-card" role="alertdialog" aria-modal="true" aria-labelledby="delete-title" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="ruh-modal-header"><div><p className="ruh-kicker">Permanent action</p><h2 id="delete-title">Delete Northstar?</h2></div><button type="button" onClick={() => setShowDelete(false)} aria-label="Close dialog">×</button></div>
+        <div className="ruh-modal-backdrop" role="presentation" onMouseDown={closeDelete}>
+          <section ref={deleteDialogRef} className="ruh-modal-card" role="alertdialog" aria-modal="true" aria-labelledby="delete-title" tabIndex={-1} onMouseDown={(event) => event.stopPropagation()}>
+            <div className="ruh-modal-header"><div><p className="ruh-kicker">Permanent action</p><h2 id="delete-title">Delete Northstar?</h2></div><button type="button" onClick={closeDelete} aria-label="Close dialog">×</button></div>
             <p>This removes every agent, conversation, outcome, integration, and team member. This cannot be undone.</p>
-            <label className="ruh-plain-field"><span>Type DELETE to confirm</span><input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} /></label>
-            <div className="ruh-modal-actions"><button className="ruh-secondary-button" type="button" onClick={() => setShowDelete(false)}>Keep workspace</button><button className="ruh-danger-button" type="button" disabled={deleteConfirmation !== "DELETE"} onClick={() => { setShowDelete(false); setDeleteConfirmation(""); setNotice("Deletion confirmation is ready for secure backend handling."); }}>Delete workspace</button></div>
+            <label className="ruh-plain-field"><span>Type DELETE to confirm</span><input data-autofocus value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} /></label>
+            <div className="ruh-modal-actions"><button className="ruh-secondary-button" type="button" onClick={closeDelete}>Keep workspace</button><button className="ruh-danger-button" type="button" disabled={deleteConfirmation !== "DELETE"} onClick={() => { closeDelete(); setDeleteConfirmation(""); setNotice("Deletion confirmation is ready for secure backend handling."); }}>Delete workspace</button></div>
           </section>
         </div>
       ) : null}

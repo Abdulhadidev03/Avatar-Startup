@@ -316,7 +316,7 @@ export function AgentWorkspace({ agent: initialAgent, conversations: initialConv
   const router = useRouter();
   const [agent, setAgent] = useState(initialAgent);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("Overview");
-  const [status, setStatus] = useState(agent.status);
+  const [status, setStatus] = useState<FrontendAgent["status"]>(initialAgent?.status ?? "Draft");
   const [testOpen, setTestOpen] = useState(false);
   const [testStatus, setTestStatus] = useState<"idle" | "connecting" | "connected" | "error">("idle");
   const [testError, setTestError] = useState<string | null>(null);

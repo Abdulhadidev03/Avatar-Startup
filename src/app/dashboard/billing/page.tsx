@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { PageHeader } from "../dashboard-ui";
+import { useDialogFocus } from "../use-dialog-focus";
 
 type PlanName = "Starter" | "Growth" | "Scale";
 
@@ -24,11 +25,8 @@ export default function BillingPage() {
   const [notice, setNotice] = useState("");
   const [usageAlert, setUsageAlert] = useState(true);
 
-  useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setDialog(null); };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, []);
+  const closeDialog = useCallback(() => setDialog(null), []);
+  const dialogRef = useDialogFocus(Boolean(dialog), closeDialog);
 
   const activePlan = plans[plan];
   const usagePercent = Math.min(100, Math.round((4820 / activePlan.minutes) * 100));
@@ -110,7 +108,7 @@ export default function BillingPage() {
             </div>
             <span>{usagePercent}% used</span>
           </div>
-          <div className="ruh-usage-progress" aria-label={`4,820 of ${activePlan.minutes.toLocaleString()} minutes used`}>
+          <div className="ruh-usage-progress" role="progressbar" aria-label="Billing-cycle minute allowance" aria-valuemin={0} aria-valuemax={activePlan.minutes} aria-valuenow={Math.min(4820, activePlan.minutes)} aria-valuetext={`4,820 of ${activePlan.minutes.toLocaleString()} minutes used`}>
             <span style={{ width: `${usagePercent}%` }} />
           </div>
           <div className="ruh-allowance-numbers">
@@ -175,11 +173,11 @@ export default function BillingPage() {
       </section>
 
       {dialog === "plan" ? (
-        <div className="ruh-modal-backdrop" role="presentation" onMouseDown={() => setDialog(null)}>
-          <section className="ruh-modal-card ruh-plan-modal" role="dialog" aria-modal="true" aria-labelledby="plan-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="ruh-modal-backdrop" role="presentation" onMouseDown={closeDialog}>
+          <section ref={dialogRef} className="ruh-modal-card ruh-plan-modal" role="dialog" aria-modal="true" aria-labelledby="plan-dialog-title" tabIndex={-1} onMouseDown={(event) => event.stopPropagation()}>
             <div className="ruh-modal-header">
               <div><p className="ruh-kicker">Subscription</p><h2 id="plan-dialog-title">Choose your plan</h2></div>
-              <button type="button" onClick={() => setDialog(null)} aria-label="Close dialog">×</button>
+              <button type="button" onClick={closeDialog} aria-label="Close dialog">×</button>
             </div>
             <div className="ruh-plan-options">
               {(Object.keys(plans) as PlanName[]).map((option) => (
@@ -195,7 +193,7 @@ export default function BillingPage() {
             </div>
             <p className="ruh-modal-note">Changes take effect at your next renewal. Billing will show the exact proration before backend confirmation.</p>
             <div className="ruh-modal-actions">
-              <button className="ruh-secondary-button" type="button" onClick={() => setDialog(null)}>Keep current plan</button>
+              <button className="ruh-secondary-button" type="button" onClick={closeDialog}>Keep current plan</button>
               <button className="ruh-primary-button" type="button" onClick={applyPlan}>Confirm {pendingPlan}</button>
             </div>
           </section>
@@ -203,11 +201,11 @@ export default function BillingPage() {
       ) : null}
 
       {dialog === "payment" ? (
-        <div className="ruh-modal-backdrop" role="presentation" onMouseDown={() => setDialog(null)}>
-          <section className="ruh-modal-card" role="dialog" aria-modal="true" aria-labelledby="payment-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="ruh-modal-backdrop" role="presentation" onMouseDown={closeDialog}>
+          <section ref={dialogRef} className="ruh-modal-card" role="dialog" aria-modal="true" aria-labelledby="payment-dialog-title" tabIndex={-1} onMouseDown={(event) => event.stopPropagation()}>
             <div className="ruh-modal-header">
               <div><p className="ruh-kicker">Secure billing</p><h2 id="payment-dialog-title">Update payment method</h2></div>
-              <button type="button" onClick={() => setDialog(null)} aria-label="Close dialog">×</button>
+              <button type="button" onClick={closeDialog} aria-label="Close dialog">×</button>
             </div>
             <div className="ruh-secure-payment-placeholder">
               <span aria-hidden="true">••••</span>
@@ -217,8 +215,8 @@ export default function BillingPage() {
               </div>
             </div>
             <div className="ruh-modal-actions">
-              <button className="ruh-secondary-button" type="button" onClick={() => setDialog(null)}>Cancel</button>
-              <button className="ruh-primary-button" type="button" onClick={() => { setDialog(null); setNotice("Secure payment form is ready for backend connection."); }}>
+              <button className="ruh-secondary-button" type="button" onClick={closeDialog}>Cancel</button>
+              <button className="ruh-primary-button" type="button" onClick={() => { closeDialog(); setNotice("Secure payment form is ready for backend connection."); }}>
                 Open secure form
               </button>
             </div>

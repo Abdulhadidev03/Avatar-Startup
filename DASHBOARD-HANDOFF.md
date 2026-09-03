@@ -22,11 +22,18 @@ The dashboard is a complete interactive frontend prototype for Ruhana's website 
 ## Shared frontend data
 
 - Agent, avatar, and conversation shapes are in `src/app/dashboard/mock-data.ts`.
+- Browser-only draft, launch, and status persistence is isolated in `src/app/dashboard/agents/agent-storage.ts`.
 - Analytics shapes and the coherent 7/30/90-day demo dataset are in `src/app/dashboard/analytics/analytics-data.ts`.
 - Reusable avatar, status, and page-heading components are in `src/app/dashboard/dashboard-ui.tsx`.
 - The original avatar atlas is `public/avatars/ruhana-avatar-atlas.png`.
 
 Keep money in minor units, timestamps in UTC, and rates as values from 0–1 in backend responses. Format them for locale only in the frontend.
+
+### Prototype persistence
+
+The four-step builder is fully usable before backend wiring. Save and exit, resume, launch, pause, and resume use the browser key `ruhana.frontend-agents.v1`. A launched agent keeps the generated ID and opens its own workspace; custom-photo previews are stored as data URLs when browser storage permits. This store is deliberately behind typed helper functions so the backend team can replace it with agent draft and publish endpoints without changing page components.
+
+The shared 30-day demo baseline is 1,284 conversations, 514 attributed outcomes, 4,820 connected minutes, and a 10,000-minute Growth allowance. Keep those totals reconciled across conversations, analytics, usage, and billing until live API data replaces the demo layer.
 
 ## Suggested API boundaries
 
