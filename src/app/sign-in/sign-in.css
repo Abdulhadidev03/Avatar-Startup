@@ -55,9 +55,9 @@
 .ruh-auth-logo-link .ruh-logo,
 .ruh-auth-mobile-logo .ruh-logo { display: inline-flex; align-items: center; gap: 10px; }
 .ruh-auth-logo-link .ruh-logo-mark,
-.ruh-auth-mobile-logo .ruh-logo-mark { width: 27px; height: 27px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.15; }
+.ruh-auth-mobile-logo .ruh-logo-mark { width: 23px; height: 28px; fill: currentColor; }
 .ruh-auth-logo-link .ruh-logo span,
-.ruh-auth-mobile-logo .ruh-logo span { font-size: 20px; font-weight: 665; letter-spacing: -.045em; }
+.ruh-auth-mobile-logo .ruh-logo span { font-size: 20px; font-weight: 680; letter-spacing: -.05em; }
 
 .ruh-auth-halo {
   position: absolute;
@@ -159,6 +159,9 @@
 .ruh-auth-form input:disabled { background: #f0f2f1; color: #777c78; }
 .ruh-auth-form > .ruh-auth-primary-button { margin-top: 7px; }
 .ruh-auth-help { max-width: 355px; margin: 17px 0 0; color: #737771; font-size: 11px; line-height: 1.5; }
+.ruh-auth-legal { max-width: 385px; margin: 26px 0 0; color: #858a85; font-size: 10px; line-height: 1.6; }
+.ruh-auth-legal a { color: #4c5550; text-decoration: underline; text-decoration-color: #bdc4bf; text-underline-offset: 3px; }
+.ruh-auth-legal a:hover { color: #171a1c; text-decoration-color: currentColor; }
 
 .ruh-auth-code-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .ruh-auth-code-heading p { margin: 4px 0 1px; color: #70756f; font-size: 11px; line-height: 1.5; }

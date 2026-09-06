@@ -1,8 +1,8 @@
 import { DEFAULT_AUTH_REDIRECT, getSafeAuthRedirect } from "@/lib/auth-redirect";
+import { RuhanaLogo } from "@/components/ruhana-logo";
 import { getAuthenticatedRuhanaUser } from "@/lib/supabase/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { RuhanaLogo } from "../dashboard/dashboard-icons";
 import { SignInForm } from "./sign-in-form";
 import "./sign-in.css";
 
@@ -49,8 +49,8 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
       <a className="ruh-auth-skip-link" href="#sign-in-form">Skip to sign in</a>
 
       <section className="ruh-auth-story" aria-labelledby="ruh-auth-story-title">
-        <Link className="ruh-auth-logo-link" href="/" aria-label="Ruhana home">
-          <RuhanaLogo />
+        <Link className="ruh-auth-logo-link" href="/" aria-label="Ruhana AI home">
+          <RuhanaLogo href={null} />
         </Link>
 
         <div className="ruh-auth-halo" aria-hidden="true">
@@ -75,7 +75,7 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
 
       <section className="ruh-auth-panel" aria-labelledby="sign-in-title">
         <div className="ruh-auth-panel-inner">
-          <Link className="ruh-auth-mobile-logo" href="/" aria-label="Ruhana home"><RuhanaLogo /></Link>
+          <Link className="ruh-auth-mobile-logo" href="/" aria-label="Ruhana AI home"><RuhanaLogo href={null} /></Link>
           <div className="ruh-auth-heading">
             <p className="ruh-auth-eyebrow">Welcome back</p>
             <h2 id="sign-in-title">Sign in</h2>
@@ -87,6 +87,10 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
             initialMessage={initialMessage}
             nextPath={nextPath}
           />
+          <p className="ruh-auth-legal">
+            By continuing, you agree to the <Link href="/terms">Terms of Service</Link>
+            {" "}and acknowledge the <Link href="/privacy">Privacy Policy</Link>.
+          </p>
         </div>
       </section>
     </main>

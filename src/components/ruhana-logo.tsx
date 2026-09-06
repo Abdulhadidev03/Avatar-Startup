@@ -1,29 +1,48 @@
 import Link from "next/link";
 
 type RuhanaLogoProps = {
-  href?: string;
+  href?: string | null;
   className?: string;
   compact?: boolean;
+  orientation?: "horizontal" | "vertical";
 };
 
-export function RuhanaLogo({ href = "/", className = "", compact = false }: RuhanaLogoProps) {
+export function RuhanaMark({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={`ruh-brand-mark ruh-logo-mark ${className}`.trim()}
+      focusable="false"
+      viewBox="0 0 100 120"
+    >
+      <path d="M0 0h53c22 0 36 14 36 36 0 16-8 27-22 32L0 0Z" />
+      <circle cx="20" cy="49" r="14" />
+      <path d="M0 62v58h58L0 62Z" />
+      <path d="M18 70h50l32 33v17H68L18 70Z" />
+    </svg>
+  );
+}
+
+export function RuhanaLogo({
+  href = "/",
+  className = "",
+  compact = false,
+  orientation = "horizontal",
+}: RuhanaLogoProps) {
   const content = (
     <>
-      <svg aria-hidden="true" className="ruh-brand-mark" viewBox="0 0 30 30">
-        <path d="M6 25.5V4.5h8.6c5.7 0 9.1 2.6 9.1 7.2s-3.4 7.3-9.1 7.3H6" />
-        <path d="m15 19 9 7" />
-        <path d="M6 10.7h8.2" />
-      </svg>
-      {!compact && <span>Ruhana</span>}
+      <RuhanaMark />
+      {!compact && <span>Ruhana AI</span>}
     </>
   );
+  const classes = `ruh-brand ruh-logo is-${orientation} ${className}`.trim();
 
   return href ? (
-    <Link className={`ruh-brand ${className}`.trim()} href={href} aria-label="Ruhana home">
+    <Link className={classes} href={href} aria-label="Ruhana AI home">
       {content}
     </Link>
   ) : (
-    <span className={`ruh-brand ${className}`.trim()} aria-label="Ruhana">
+    <span className={classes} aria-label="Ruhana AI">
       {content}
     </span>
   );

@@ -68,13 +68,18 @@ type IconName =
   | "volumeOff";
 
 function WidgetIcon({ name }: { name: IconName }) {
-  const paths: Record<IconName, React.ReactNode> = {
-    brand: (
-      <>
-        <path d="M7.5 7.25a4.75 4.75 0 0 1 9.5 0c0 3.75-4.75 4.5-4.75 8.5" />
-        <path d="M8.5 17.75h7.5M10 20.75h4.5" />
-      </>
-    ),
+  if (name === "brand") {
+    return (
+      <svg className="wgt-brand-glyph" viewBox="0 0 100 120" aria-hidden="true" focusable="false">
+        <path d="M0 0h53c22 0 36 14 36 36 0 16-8 27-22 32L0 0Z" />
+        <circle cx="20" cy="49" r="14" />
+        <path d="M0 62v58h58L0 62Z" />
+        <path d="M18 70h50l32 33v17H68L18 70Z" />
+      </svg>
+    );
+  }
+
+  const paths: Record<Exclude<IconName, "brand">, React.ReactNode> = {
     end: <path d="M6.3 15.8a8.5 8.5 0 0 1 11.4 0l1.2-2.2a1.5 1.5 0 0 0-.45-1.95 10.75 10.75 0 0 0-12.9 0 1.5 1.5 0 0 0-.45 1.95l1.2 2.2Z" />,
     mic: (
       <>

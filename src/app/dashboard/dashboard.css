@@ -58,20 +58,17 @@
 }
 
 .ruh-logo-mark {
-  width: 27px;
-  height: 27px;
+  width: 23px;
+  height: 28px;
   overflow: visible;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.15;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  flex: 0 0 auto;
+  fill: currentColor;
 }
 
 .ruh-logo span {
   font-size: 20px;
-  font-weight: 665;
-  letter-spacing: -0.045em;
+  font-weight: 680;
+  letter-spacing: -0.05em;
 }
 
 .ruh-mode-switch {

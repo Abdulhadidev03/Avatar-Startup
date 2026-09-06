@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { Icon, type IconName, RuhanaLogo } from "./dashboard-icons";
+import { RuhanaLogo } from "@/components/ruhana-logo";
+import { Icon, type IconName } from "./dashboard-icons";
 
 type NavigationItem = { label: string; href: string; icon: IconName };
 type DashboardShellUser = { displayName: string; email: string | null; initials: string };
@@ -168,7 +169,7 @@ export function DashboardShell({ children, user }: { children: React.ReactNode; 
           <button className="ruh-icon-button ruh-mobile-menu" aria-label="Open navigation" aria-controls="ruh-dashboard-navigation" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(true)}>
             <Icon name="menu" width="20" height="20" />
           </button>
-          <Link className="ruh-header-logo" href="/dashboard/agents" aria-label="Ruhana dashboard" onClick={() => setSidebarOpen(false)}><RuhanaLogo /></Link>
+          <Link className="ruh-header-logo" href="/dashboard/agents" aria-label="Ruhana AI dashboard" onClick={() => setSidebarOpen(false)}><RuhanaLogo href={null} /></Link>
         </div>
 
         <div className="ruh-topbar-actions">

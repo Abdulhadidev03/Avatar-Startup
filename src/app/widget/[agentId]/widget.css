@@ -109,6 +109,13 @@ input:focus-visible {
   stroke-linejoin: round;
 }
 
+.wgt-brand-mark .wgt-brand-glyph {
+  width: 16px;
+  height: 20px;
+  fill: currentColor;
+  stroke: none;
+}
+
 .wgt-identity {
   display: flex;
   min-width: 0;
