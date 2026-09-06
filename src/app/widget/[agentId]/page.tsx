@@ -353,6 +353,16 @@ export default function WidgetPage({
         }
 
         const replyText = String(body.replyText ?? "").trim();
+        if (body.debug?.systemPrompt) {
+          console.groupCollapsed(
+            "%c🧠 [AGENT BRAIN SYSTEM PROMPT & CONTEXT]",
+            "color: #0ea5e9; font-weight: bold; font-size: 12px; padding: 2px 4px; background: #0f172a; border-radius: 4px;"
+          );
+          console.log("%cLive Screen Context:", "font-weight: bold; color: #10b981;", body.debug.liveContext);
+          console.log("%cVisitor Browsing Journey:", "font-weight: bold; color: #f59e0b;", body.debug.recentEvents);
+          console.log("%cFinal System Prompt Sent to LLM:\n\n", "font-weight: bold; color: #c084fc;", body.debug.systemPrompt);
+          console.groupEnd();
+        }
         if (!replyText) return;
         addMessage("assistant", replyText);
         if (anamRef.current?.isStreaming()) {
@@ -419,6 +429,15 @@ export default function WidgetPage({
       try {
         const { sessionToken } = await ensureSession("voice");
         if (!sessionToken) throw new Error("Voice session unavailable");
+
+        if (sessionToken.startsWith("mock-")) {
+          voiceStartingRef.current = false;
+          setStatus("chatting");
+          setError(
+            "Anam avatar video/voice is paused (PAUSE_ANAM_API=true) to save credits. Use the text box below to chat & inspect prompts!",
+          );
+          return;
+        }
 
         const anam = createClient(sessionToken);
         anamRef.current = anam;

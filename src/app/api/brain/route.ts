@@ -186,35 +186,71 @@ export async function POST(req: Request) {
       content: t.content,
     }));
 
-    // Ask OpenAI for the sales reply (with business context if available)
-    const response = await openai.chat.completions.create({
-      model: OPENAI_MODEL,
-      max_completion_tokens: 200,
-      reasoning_effort: OPENAI_REASONING_EFFORT,
-      messages: [
-        {
-          role: "system",
-          content: buildSystemPrompt(
-            agentName,
-            profileText,
-            customInstructions,
-            knowledgeTexts,
-            liveContext,
-            recentEvents
-          ),
-        },
-        ...messages,
-      ],
-    });
+    const finalSystemPrompt = buildSystemPrompt(
+      agentName,
+      profileText,
+      customInstructions,
+      knowledgeTexts,
+      liveContext,
+      recentEvents
+    );
 
-    const rawReply =
-      response.choices[0]?.message?.content ??
-      "Sorry, I didn't catch that. Could you say that again?";
+    // Prompt Inspection Log
+    console.log("\n" + "=".repeat(70));
+    console.log("🧠 [AGENT BRAIN PROMPT INSPECTION]");
+    console.log("=".repeat(70));
+    console.log(`Session ID:   ${sessionId}`);
+    console.log(`User Input:   "${userText}"`);
+    console.log("\n--- [LIVE VISITOR CONTEXT RECEIVED] ---");
+    if (liveContext) {
+      console.log(`URL / Path:     ${liveContext.path || liveContext.url || "N/A"}`);
+      console.log(`Scroll Depth:   ${typeof liveContext.scrollDepth === "number" ? liveContext.scrollDepth + "%" : "N/A"}`);
+      console.log(`Visible Section: ${liveContext.visibleSection || "None"}`);
+      console.log(`Last Click:     ${liveContext.lastClick || "None"}`);
+    } else {
+      console.log("No live context sent.");
+    }
+    console.log("\n--- [VISITOR BROWSING JOURNEY] ---");
+    if (recentEvents && recentEvents.length > 0) {
+      console.log(formatJourney(recentEvents));
+    } else {
+      console.log("No browsing history events sent.");
+    }
+    console.log("\n--- [FINAL SYSTEM PROMPT SENT TO LLM] ---");
+    console.log(finalSystemPrompt);
+    console.log("=".repeat(70) + "\n");
 
-    // Keep model-internal reasoning out of the spoken avatar response.
-    const replyText =
-      rawReply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim() ||
-      "Sorry, I didn't catch that. Could you say that again?";
+    let replyText: string;
+
+    if (process.env.PAUSE_LLM === "true") {
+      console.log("⏸️ [LLM PAUSED] Skipping OpenAI call. Returning contextual mock reply.");
+      const sectionInfo = liveContext?.visibleSection ? ` looking at "${liveContext.visibleSection}"` : "";
+      const scrollInfo = typeof liveContext?.scrollDepth === "number" ? ` (${liveContext.scrollDepth}% scrolled)` : "";
+      replyText = `[Test Mode] Got it! I see you are on ${liveContext?.path || "the page"}${sectionInfo}${scrollInfo}. How can I assist you further?`;
+    } else {
+      // Ask OpenAI for the sales reply (with business context if available)
+      const response = await openai.chat.completions.create({
+        model: OPENAI_MODEL,
+        max_completion_tokens: 200,
+        reasoning_effort: OPENAI_REASONING_EFFORT,
+        messages: [
+          {
+            role: "system",
+            content: finalSystemPrompt,
+          },
+          ...messages,
+        ],
+      });
+
+      const rawReply =
+        response.choices[0]?.message?.content ??
+        "Sorry, I didn't catch that. Could you say that again?";
+
+      // Keep model-internal reasoning out of the spoken avatar response.
+      replyText =
+        rawReply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim() ||
+        "Sorry, I didn't catch that. Could you say that again?";
+    }
 
     // Detect if a lead was captured (email mentioned)
     const emailRegex = /[\w.-]+@[\w.-]+\.\w{2,}/;
@@ -240,7 +276,15 @@ export async function POST(req: Request) {
       content: replyText,
     });
 
-    return NextResponse.json({ replyText, leadCaptured });
+    return NextResponse.json({
+      replyText,
+      leadCaptured,
+      debug: {
+        systemPrompt: finalSystemPrompt,
+        liveContext: liveContext || null,
+        recentEvents: recentEvents || [],
+      },
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("Brain error:", message);

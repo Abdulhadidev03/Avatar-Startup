@@ -60,9 +60,10 @@ function resolveAvatarId(
   preferred: string | null,
   preferCustom: boolean,
 ) {
-  // Agent DB is the source of truth — don't drop a custom ID just because the
-  // avatar list cache is stale after a fresh upload.
-  if (preferred) return preferred;
+  // If the agent's preferred avatar exists in Anam, use it
+  if (preferred && avatars.some((avatar) => avatar.id === preferred)) {
+    return preferred;
+  }
 
   const orgCustom =
     avatars.find((avatar) => avatar.id && avatar.createdByOrganizationId)?.id ?? null;
@@ -75,6 +76,7 @@ function resolveAvatarId(
     avatars.find((avatar) => avatar.id && !avatar.createdByOrganizationId)?.id
     ?? orgCustom
     ?? avatars.find((avatar) => avatar.id)?.id
+    ?? preferred
     ?? null
   );
 }
@@ -129,47 +131,89 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    const avatars = await getAvailableAvatars(apiKey);
-    const avatarId = resolveAvatarId(
-      avatars,
-      agentConfig?.avatarId ?? null,
-      Boolean(agentConfig?.imageUrl),
-    );
-    const voiceId = agentConfig?.voiceId ?? fallbackVoiceId;
-    if (!avatarId || !voiceId) {
-      return NextResponse.json({ error: "This agent is missing its voice or avatar." }, { status: 503 });
-    }
+    const pauseAnam = process.env.PAUSE_ANAM_API === "true";
 
-    const anamResponse = await fetch("https://api.anam.ai/v1/auth/session-token", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        personaConfig: {
-          name: agentConfig?.name ?? "Ruhana guide",
-          avatarId,
-          avatarModel: "cara-4",
-          voiceId,
-          llmId: "CUSTOMER_CLIENT_V1",
+    let sessionToken = "mock-anam-token-" + Date.now();
+
+    if (pauseAnam) {
+      console.log(
+        "⏸️ [ANAM API PAUSED] Bypassing Anam API session creation to preserve credits.",
+        { agentId, pageUrl }
+      );
+    } else {
+      const avatars = await getAvailableAvatars(apiKey);
+      const avatarId = resolveAvatarId(
+        avatars,
+        agentConfig?.avatarId ?? null,
+        Boolean(agentConfig?.imageUrl),
+      );
+      const voiceId = agentConfig?.voiceId ?? fallbackVoiceId;
+      if (!avatarId || !voiceId) {
+        return NextResponse.json({ error: "This agent is missing its voice or avatar." }, { status: 503 });
+      }
+
+      let anamResponse = await fetch("https://api.anam.ai/v1/auth/session-token", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
         },
-        sessionOptions: {
-          videoWidth: orientation === "portrait" ? 768 : 1152,
-          videoHeight: orientation === "portrait" ? 1152 : 768,
-          videoQuality: "high",
-        },
-      }),
-    });
+        body: JSON.stringify({
+          personaConfig: {
+            name: agentConfig?.name ?? "Ruhana guide",
+            avatarId,
+            avatarModel: "cara-4",
+            voiceId,
+            llmId: "CUSTOMER_CLIENT_V1",
+          },
+          sessionOptions: {
+            videoWidth: orientation === "portrait" ? 768 : 1152,
+            videoHeight: orientation === "portrait" ? 1152 : 768,
+            videoQuality: "high",
+          },
+        }),
+      });
 
-    if (!anamResponse.ok) {
-      console.error("Anam session token failed", anamResponse.status);
-      return NextResponse.json({ error: "The live avatar could not connect." }, { status: 502 });
-    }
+      if (!anamResponse.ok) {
+        const errDetails = await anamResponse.json().catch(() => ({}));
+        console.error("Anam session token failed:", anamResponse.status, errDetails);
 
-    const { sessionToken } = await anamResponse.json();
-    if (typeof sessionToken !== "string" || !sessionToken) {
-      return NextResponse.json({ error: "The live avatar returned an invalid session." }, { status: 502 });
+        // If specific avatar ID failed, retry with fallback avatar ID
+        if (avatarId !== process.env.ANAM_AVATAR_ID && process.env.ANAM_AVATAR_ID) {
+          console.warn(`Retrying Anam session with fallback avatar ${process.env.ANAM_AVATAR_ID}...`);
+          anamResponse = await fetch("https://api.anam.ai/v1/auth/session-token", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              personaConfig: {
+                name: agentConfig?.name ?? "Ruhana guide",
+                avatarId: process.env.ANAM_AVATAR_ID,
+                avatarModel: "cara-4",
+                voiceId,
+                llmId: "CUSTOMER_CLIENT_V1",
+              },
+              sessionOptions: {
+                videoWidth: orientation === "portrait" ? 768 : 1152,
+                videoHeight: orientation === "portrait" ? 1152 : 768,
+                videoQuality: "high",
+              },
+            }),
+          });
+        }
+      }
+
+      if (!anamResponse.ok) {
+        return NextResponse.json({ error: "The live avatar could not connect." }, { status: 502 });
+      }
+
+      const payload = await anamResponse.json();
+      if (typeof payload.sessionToken !== "string" || !payload.sessionToken) {
+        return NextResponse.json({ error: "The live avatar returned an invalid session." }, { status: 502 });
+      }
+      sessionToken = payload.sessionToken;
     }
 
     const effectiveProfileId = agentConfig?.profileId ?? requestedProfileId;
@@ -187,7 +231,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "The conversation could not be recorded." }, { status: 500 });
     }
 
-    return NextResponse.json({ sessionToken, sessionId: session.id });
+    return NextResponse.json({ sessionToken, sessionId: session.id, paused: pauseAnam });
   } catch (error) {
     console.error("Session creation failed", error instanceof Error ? error.message : "Unknown error");
     return NextResponse.json({ error: "The live avatar could not start." }, { status: 500 });
