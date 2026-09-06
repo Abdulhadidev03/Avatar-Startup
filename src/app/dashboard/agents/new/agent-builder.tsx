@@ -412,12 +412,14 @@ export function AgentBuilder({ initialAvatarId, initialSource, resumeAgentId }: 
             const detail = [voice.description?.split(".")[0], voice.country ? `· ${voice.country}` : ""].filter(Boolean).join(" ");
             const lang = voice.gender ? (voice.gender === "FEMALE" ? "Female" : voice.gender === "MALE" ? "Male" : "Neutral") : "";
             return (
-              <label className={voiceId === voice.id ? "is-selected" : ""} key={voice.id}>
-                <input type="radio" name="voice" checked={voiceId === voice.id} onChange={() => { setVoiceId(voice.id); markSaving(); }} />
-                <button type="button" aria-label={`${playingVoiceId === voice.id ? "Stop" : "Preview"} ${label} voice`} aria-pressed={playingVoiceId === voice.id} onClick={(event) => { event.preventDefault(); previewVoice(voice.id); }}>{playingVoiceId === voice.id ? "■" : "▶"}</button>
-                <span><strong>{label}</strong><small>{detail}</small></span>
-                <em>{lang}</em>
-              </label>
+              <div className={voiceId === voice.id ? "is-selected" : ""} key={voice.id}>
+                <input id={`voice-${voice.id}`} type="radio" name="voice" checked={voiceId === voice.id} onChange={() => { setVoiceId(voice.id); markSaving(); }} />
+                <button type="button" aria-label={`${playingVoiceId === voice.id ? "Stop" : "Preview"} ${label} voice`} aria-pressed={playingVoiceId === voice.id} onClick={() => previewVoice(voice.id)}>{playingVoiceId === voice.id ? "■" : "▶"}</button>
+                <label htmlFor={`voice-${voice.id}`}>
+                  <span><strong>{label}</strong><small>{detail}</small></span>
+                  <em>{lang}</em>
+                </label>
+              </div>
             );
           })}</div>
         )}
