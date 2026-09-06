@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
-import Groq from "groq-sdk";
 import { supabaseAdmin } from "@/lib/supabase";
-
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
+import { openai, OPENAI_MODEL } from "@/lib/openai";
 
 const ANALYZE_PROMPT = `You are an expert sales manager evaluating a recorded sales conversation between an AI avatar salesperson (Sarah) and a website visitor.
 
@@ -88,14 +84,14 @@ export async function POST(req: Request) {
       return NextResponse.json(fallbackAnalysis);
     }
 
-    // 3. Format transcript for Groq
+    // 3. Format transcript for OpenAI
     const transcriptText = turns
       .map((t) => `${t.role === "user" ? "Visitor" : "Sarah (Salesperson)"}: ${t.content}`)
       .join("\n");
 
-    // 4. Request evaluation from Groq
-    const response = await groq.chat.completions.create({
-      model: "qwen/qwen3.8-27b",
+    // 4. Request evaluation from OpenAI
+    const response = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
       max_tokens: 300,
       temperature: 0.2,
       response_format: { type: "json_object" },

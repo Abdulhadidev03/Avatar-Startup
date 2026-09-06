@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server";
 import FirecrawlApp from "@mendable/firecrawl-js";
-import Groq from "groq-sdk";
 import { supabaseAdmin } from "@/lib/supabase";
+import { openai, OPENAI_MODEL } from "@/lib/openai";
 
 const firecrawl = new FirecrawlApp({
   apiKey: process.env.FIRECRAWL_API_KEY!,
-});
-
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
 });
 
 const PROFILE_PROMPT = `You are a business analyst. Given the raw content scraped from a company's website, produce a concise Business Profile that a sales AI avatar can use to answer visitor questions.
@@ -60,9 +56,9 @@ export async function POST(req: Request) {
       .join("\n\n---\n\n")
       .slice(0, 12000);
 
-    // 2. Generate the Business Profile with Groq
-    const response = await groq.chat.completions.create({
-      model: "qwen/qwen3.8-27b",
+    // 2. Generate the Business Profile with OpenAI
+    const response = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
       max_tokens: 1500,
       messages: [
         { role: "system", content: PROFILE_PROMPT },

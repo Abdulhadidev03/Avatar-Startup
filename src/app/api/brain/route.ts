@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
-import Groq from "groq-sdk";
 import { supabaseAdmin } from "@/lib/supabase";
-
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
+import { openai, OPENAI_MODEL } from "@/lib/openai";
 
 const BASE_PROMPT_TEMPLATE = (agentName: string) =>
   `You are ${agentName}, a friendly and professional AI sales representative.
@@ -128,9 +124,9 @@ export async function POST(req: Request) {
       content: t.content,
     }));
 
-    // Ask Groq for the sales reply (with business context if available)
-    const response = await groq.chat.completions.create({
-      model: "qwen/qwen3.8-27b",
+    // Ask OpenAI for the sales reply (with business context if available)
+    const response = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
       max_tokens: 200,
       messages: [
         { role: "system", content: buildSystemPrompt(agentName, profileText, customInstructions, knowledgeTexts) },
@@ -138,13 +134,9 @@ export async function POST(req: Request) {
       ],
     });
 
-    let rawReply =
-      response.choices[0]?.message?.content ??
+    const replyText =
+      response.choices[0]?.message?.content?.trim() ||
       "Sorry, I didn't catch that. Could you say that again?";
-
-    // Strip <think>…</think> blocks that reasoning models like Qwen emit
-    const replyText = rawReply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim()
-      || "Sorry, I didn't catch that. Could you say that again?";
 
     // Detect if a lead was captured (email mentioned)
     const emailRegex = /[\w.-]+@[\w.-]+\.\w{2,}/;
