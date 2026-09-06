@@ -169,7 +169,7 @@ export function DashboardShell({ children, user }: { children: React.ReactNode; 
           <button className="ruh-icon-button ruh-mobile-menu" aria-label="Open navigation" aria-controls="ruh-dashboard-navigation" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(true)}>
             <Icon name="menu" width="20" height="20" />
           </button>
-          <Link className="ruh-header-logo" href="/dashboard/agents" aria-label="Ruhana AI dashboard" onClick={() => setSidebarOpen(false)}><RuhanaLogo href={null} /></Link>
+          <Link className="ruh-header-logo" href="/" aria-label="Ruhana AI home" onClick={() => setSidebarOpen(false)}><RuhanaLogo href={null} /></Link>
         </div>
 
         <div className="ruh-topbar-actions">
