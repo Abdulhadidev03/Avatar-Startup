@@ -92,6 +92,14 @@ export default function WidgetPage({ params }: { params: Promise<{ agentId: stri
       anam.addListener(AnamEvent.CONNECTION_CLOSED, () => {
         setStatus("ended");
         anamRef.current = null;
+        const sid = sessionIdRef.current;
+        if (sid) {
+          fetch("/api/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId: sid }),
+          }).catch(() => {});
+        }
       });
 
       let lastProcessedIdx = -1;
@@ -161,9 +169,19 @@ export default function WidgetPage({ params }: { params: Promise<{ agentId: stri
   }, [startCall, status]);
 
   function endCall() {
+    const sid = sessionIdRef.current;
     anamRef.current?.stopStreaming();
     anamRef.current = null;
     setStatus("ended");
+
+    // Score the call for the conversations dashboard
+    if (sid) {
+      fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: sid }),
+      }).catch(() => {});
+    }
 
     // Tell the parent iframe to close
     window.parent.postMessage({ type: "WIDGET_END" }, "*");

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import FirecrawlApp from "@mendable/firecrawl-js";
 import { supabaseAdmin } from "@/lib/supabase";
-import { openai, OPENAI_MODEL } from "@/lib/openai";
+import { openai, OPENAI_MODEL, OPENAI_REASONING_EFFORT } from "@/lib/openai";
 
 const firecrawl = new FirecrawlApp({
   apiKey: process.env.FIRECRAWL_API_KEY!,
@@ -59,7 +59,8 @@ export async function POST(req: Request) {
     // 2. Generate the Business Profile with OpenAI
     const response = await openai.chat.completions.create({
       model: OPENAI_MODEL,
-      max_tokens: 1500,
+      max_completion_tokens: 1500,
+      reasoning_effort: OPENAI_REASONING_EFFORT,
       messages: [
         { role: "system", content: PROFILE_PROMPT },
         {

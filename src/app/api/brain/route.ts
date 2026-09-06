@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-import { openai, OPENAI_MODEL } from "@/lib/openai";
+import { openai, OPENAI_MODEL, OPENAI_REASONING_EFFORT } from "@/lib/openai";
 
 const BASE_PROMPT_TEMPLATE = (agentName: string) =>
   `You are ${agentName}, a friendly and professional AI sales representative.
@@ -127,7 +127,8 @@ export async function POST(req: Request) {
     // Ask OpenAI for the sales reply (with business context if available)
     const response = await openai.chat.completions.create({
       model: OPENAI_MODEL,
-      max_tokens: 200,
+      max_completion_tokens: 200,
+      reasoning_effort: OPENAI_REASONING_EFFORT,
       messages: [
         { role: "system", content: buildSystemPrompt(agentName, profileText, customInstructions, knowledgeTexts) },
         ...messages,
@@ -147,6 +148,10 @@ export async function POST(req: Request) {
       await supabaseAdmin.from("leads").insert({
         session_id: sessionId,
         email: emailMatch?.[0] ?? null,
+        name: (() => {
+          const m = userText.match(/(?:my name is|i'?m|i am)\s+([A-Z][a-z]+)/i);
+          return m?.[1] ?? null;
+        })(),
         interest: "Inbound via avatar widget",
       });
     }

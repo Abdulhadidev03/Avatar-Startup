@@ -344,11 +344,19 @@ export function AgentWorkspace({ agent: initialAgent, conversations: initialConv
 
   const stopTest = useCallback(() => {
     if (killTimerRef.current) clearTimeout(killTimerRef.current);
+    const sid = testSessionIdRef.current;
     anamRef.current?.stopStreaming();
     anamRef.current = null;
     testSessionIdRef.current = null;
     setTestStatus("idle");
     setTestOpen(false);
+    if (sid) {
+      fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: sid }),
+      }).catch(() => {});
+    }
   }, []);
 
   const openTest = useCallback(async () => {
@@ -454,19 +462,24 @@ export function AgentWorkspace({ agent: initialAgent, conversations: initialConv
         const outcomeMap: Record<string, string> = { lead_captured: "Lead", demo_booked: "Booked", no_conversion: "Open", abandoned: "Open" };
         const ms = s.ended_at ? new Date(s.ended_at).getTime() - new Date(s.started_at).getTime() : 0;
         const totalSec = Math.round(ms / 1000);
+        let visitor = lead?.name || "Anonymous visitor";
+        if (!lead?.name && lead?.email) {
+          const local = lead.email.split("@")[0] ?? lead.email;
+          visitor = local.charAt(0).toUpperCase() + local.slice(1);
+        }
 
         return {
-          id: s.id.slice(0, 8).toUpperCase(),
-          visitor: lead?.name || "Anonymous visitor",
+          id: s.id,
+          visitor,
           agent: agent.name,
           avatarId: agent.avatarId,
           startedAt: new Date(s.started_at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }),
           duration: s.ended_at ? `${Math.floor(totalSec / 60)}m ${String(totalSec % 60).padStart(2, "0")}s` : "In progress",
-          intent: analysis?.summary?.split(".")[0] ?? "Sales inquiry",
+          intent: analysis?.summary?.split(".")[0] ?? (turns.length ? "Sales inquiry" : "No conversation yet"),
           page: s.page_url ?? "/",
-          outcome: (outcomeMap[analysis?.outcome ?? ""] ?? "Open") as Conversation["outcome"],
-          value: analysis?.lead_score ? `Score: ${analysis.lead_score}` : undefined,
-          summary: analysis?.summary ?? "Conversation recorded.",
+          outcome: (outcomeMap[analysis?.outcome ?? ""] ?? (lead ? "Lead" : "Open")) as Conversation["outcome"],
+          value: analysis?.lead_score ? `Score: ${analysis.lead_score}` : lead ? "Lead captured" : undefined,
+          summary: analysis?.summary ?? (turns.length ? "Conversation recorded. Analysis pending." : "No messages in this session."),
           messages: turns.map((t) => ({
             speaker: (t.role === "user" ? "Visitor" : "Agent") as "Visitor" | "Agent",
             time: new Date(t.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),

@@ -3,8 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AvatarPortrait, PageHeader } from "../dashboard-ui";
-import { type Conversation, type ConversationOutcome } from "../mock-data";
-import { supabaseBrowser } from "@/lib/supabase-browser";
+import { type ConversationOutcome } from "../mock-data";
 
 const outcomeOptions: Array<"All" | ConversationOutcome> = [
   "All",
@@ -16,6 +15,26 @@ const outcomeOptions: Array<"All" | ConversationOutcome> = [
 ];
 
 type DateRange = "today" | "yesterday" | "7" | "30" | "90";
+
+type DashboardConversation = {
+  id: string;
+  shortId: string;
+  visitor: string;
+  leadEmail: string | null;
+  agent: string;
+  avatarId: string;
+  startedAt: string;
+  duration: string;
+  intent: string;
+  page: string;
+  outcome: ConversationOutcome;
+  value?: string;
+  summary: string;
+  messages: Array<{ speaker: "Visitor" | "Agent"; time: string; text: string }>;
+  events: Array<{ time: string; label: string; detail: string }>;
+  startedAtIso: string;
+  durationMs: number;
+};
 
 const rangeTrendLabels: Record<DateRange, string> = {
   today: "Since midnight",
@@ -29,45 +48,8 @@ function outcomeClass(outcome: ConversationOutcome) {
   return `ruh-outcome-badge is-${outcome.toLowerCase()}`;
 }
 
-function mapOutcome(dbOutcome?: string): ConversationOutcome {
-  switch (dbOutcome) {
-    case "lead_captured": return "Lead";
-    case "demo_booked": return "Booked";
-    case "no_conversion": return "Open";
-    case "abandoned": return "Open";
-    default: return "Open";
-  }
-}
-
-function formatDuration(startedAt: string, endedAt?: string): string {
-  if (!endedAt) return "In progress";
-  const ms = new Date(endedAt).getTime() - new Date(startedAt).getTime();
-  const totalSec = Math.round(ms / 1000);
-  const min = Math.floor(totalSec / 60);
-  const sec = totalSec % 60;
-  return `${min}m ${String(sec).padStart(2, "0")}s`;
-}
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-}
-
-function formatStartedAt(iso: string): string {
-  const date = new Date(iso);
-  const now = new Date();
-  const isToday = date.toDateString() === now.toDateString();
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const isYesterday = date.toDateString() === yesterday.toDateString();
-  const time = date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  if (isToday) return `Today, ${time}`;
-  if (isYesterday) return `Yesterday, ${time}`;
-  return `${date.toLocaleDateString([], { month: "short", day: "numeric" })}, ${time}`;
-}
-
 function daysSinceNow(startedAt: string): number {
-  const ms = Date.now() - new Date(startedAt).getTime();
-  return Math.floor(ms / 86400000);
+  return Math.floor((Date.now() - new Date(startedAt).getTime()) / 86400000);
 }
 
 function ConversationsContent() {
@@ -79,82 +61,28 @@ function ConversationsContent() {
   const [outcome, setOutcome] = useState<(typeof outcomeOptions)[number]>("All");
   const [range, setRange] = useState<DateRange>("30");
   const [notice, setNotice] = useState("");
-  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<DashboardConversation[]>([]);
 
   useEffect(() => {
-    async function fetchRealConversations() {
-      const { data: sessions } = await supabaseBrowser
-        .from("sessions")
-        .select("id, started_at, ended_at, page_url, status, agent_id")
-        .order("started_at", { ascending: false })
-        .limit(50);
-
-      if (!sessions?.length) return;
-
-      const sessionIds = sessions.map((s) => s.id);
-
-      // Load agents for name + avatar resolution
-      const agentIds = [...new Set(sessions.map((s) => s.agent_id).filter(Boolean))];
-      const agentMap = new Map<string, { name: string; avatarId: string }>();
-      if (agentIds.length) {
-        const { data: agents } = await supabaseBrowser
-          .from("agents")
-          .select("id, name, avatar_id")
-          .in("id", agentIds);
-        for (const a of agents ?? []) agentMap.set(a.id, { name: a.name, avatarId: a.avatar_id ?? "sarah" });
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/conversations");
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? `Failed (${res.status})`);
+        if (!cancelled) setConversations(data.conversations ?? []);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load conversations");
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-
-      const [turnsRes, analysesRes, leadsRes] = await Promise.all([
-        supabaseBrowser.from("turns").select("session_id, role, content, created_at").in("session_id", sessionIds).order("created_at", { ascending: true }),
-        supabaseBrowser.from("analyses").select("session_id, outcome, lead_score, summary").in("session_id", sessionIds),
-        supabaseBrowser.from("leads").select("session_id, name, email").in("session_id", sessionIds),
-      ]);
-
-      const turnsBySession = new Map<string, typeof turnsRes.data>();
-      for (const turn of turnsRes.data ?? []) {
-        const arr = turnsBySession.get(turn.session_id) ?? [];
-        arr.push(turn);
-        turnsBySession.set(turn.session_id, arr);
-      }
-
-      const analysisMap = new Map((analysesRes.data ?? []).map((a) => [a.session_id, a]));
-      const leadMap = new Map((leadsRes.data ?? []).map((l) => [l.session_id, l]));
-
-      const realConversations: Conversation[] = sessions.map((session) => {
-        const turns = turnsBySession.get(session.id) ?? [];
-        const analysis = analysisMap.get(session.id);
-        const lead = leadMap.get(session.id);
-        const agentInfo = session.agent_id ? agentMap.get(session.agent_id) : undefined;
-        const agentName = agentInfo?.name ?? "Sarah";
-        const avatarId = agentInfo?.avatarId ?? "sarah";
-
-        return {
-          id: session.id.slice(0, 8).toUpperCase(),
-          visitor: lead?.name || "Anonymous visitor",
-          agent: agentName,
-          avatarId,
-          startedAt: formatStartedAt(session.started_at),
-          duration: formatDuration(session.started_at, session.ended_at),
-          intent: analysis?.summary?.split(".")[0] ?? "Sales inquiry",
-          page: session.page_url ?? "/",
-          outcome: mapOutcome(analysis?.outcome),
-          value: analysis?.lead_score ? `Score: ${analysis.lead_score}` : undefined,
-          summary: analysis?.summary ?? "Conversation recorded.",
-          messages: turns.map((t) => ({
-            speaker: (t.role === "user" ? "Visitor" : "Agent") as "Visitor" | "Agent",
-            time: formatTime(t.created_at),
-            text: t.content,
-          })),
-          events: [],
-          _realStartedAt: session.started_at,
-          _durationMs: session.ended_at ? new Date(session.ended_at).getTime() - new Date(session.started_at).getTime() : 0,
-        } as Conversation & { _realStartedAt?: string; _durationMs?: number };
-      });
-
-      setConversations(realConversations);
     }
-
-    fetchRealConversations();
+    load();
+    return () => { cancelled = true; };
   }, []);
 
   const agentOptions = useMemo(
@@ -166,10 +94,7 @@ function ConversationsContent() {
     const normalizedQuery = query.trim().toLowerCase();
 
     return conversations.filter((conversation) => {
-      const real = conversation as Conversation & { _realStartedAt?: string };
-      const ageDays = real._realStartedAt
-        ? daysSinceNow(real._realStartedAt)
-        : conversation.startedAt.startsWith("Today") ? 0 : 1;
+      const ageDays = daysSinceNow(conversation.startedAtIso);
       const matchesRange =
         range === "today"
           ? ageDays === 0
@@ -179,8 +104,10 @@ function ConversationsContent() {
       const matchesQuery =
         !normalizedQuery ||
         [
+          conversation.shortId,
           conversation.id,
           conversation.visitor,
+          conversation.leadEmail ?? "",
           conversation.agent,
           conversation.intent,
           conversation.page,
@@ -196,9 +123,7 @@ function ConversationsContent() {
     const total = filteredConversations.length;
     const withOutcome = filteredConversations.filter((c) => c.outcome !== "Open").length;
     const rate = total > 0 ? ((withOutcome / total) * 100).toFixed(1) + "%" : "—";
-    const durations = filteredConversations
-      .map((c) => (c as Conversation & { _durationMs?: number })._durationMs ?? 0)
-      .filter((d) => d > 0);
+    const durations = filteredConversations.map((c) => c.durationMs).filter((d) => d > 0);
     let avgDuration = "—";
     let totalMinutes = 0;
     if (durations.length) {
@@ -220,7 +145,7 @@ function ConversationsContent() {
   const selectedId = searchParams.get("id") ?? filteredConversations[0]?.id ?? "";
 
   const activeConversation =
-    filteredConversations.find((conversation) => conversation.id === selectedId) ??
+    filteredConversations.find((conversation) => conversation.id === selectedId || conversation.shortId === selectedId) ??
     filteredConversations[0] ??
     null;
 
@@ -239,9 +164,10 @@ function ConversationsContent() {
 
   function exportConversations() {
     const rows = filteredConversations.map((conversation) => [
-      conversation.id,
+      conversation.shortId,
       conversation.startedAt,
       conversation.visitor,
+      conversation.leadEmail ?? "",
       conversation.agent,
       conversation.intent,
       conversation.page,
@@ -250,7 +176,7 @@ function ConversationsContent() {
       conversation.duration,
     ]);
     const csv = [
-      ["ID", "Started", "Visitor", "Agent", "Intent", "Page", "Outcome", "Value", "Duration"],
+      ["ID", "Started", "Visitor", "Email", "Agent", "Intent", "Page", "Outcome", "Value", "Duration"],
       ...rows,
     ]
       .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","))
@@ -286,25 +212,31 @@ function ConversationsContent() {
         </div>
       ) : null}
 
+      {error ? (
+        <div className="ruh-inline-notice" role="alert">
+          <span>{error}</span>
+        </div>
+      ) : null}
+
       <section className="ruh-metric-grid" aria-label="Conversation performance">
         <article>
           <p>Conversations</p>
-          <strong>{computedMetrics.conversations}</strong>
+          <strong>{loading ? "…" : computedMetrics.conversations}</strong>
           <span>{computedMetrics.trend}</span>
         </article>
         <article>
           <p>Completed outcomes</p>
-          <strong>{computedMetrics.outcomes}</strong>
+          <strong>{loading ? "…" : computedMetrics.outcomes}</strong>
           <span>Sales and support results</span>
         </article>
         <article>
           <p>Result rate</p>
-          <strong>{computedMetrics.rate}</strong>
+          <strong>{loading ? "…" : computedMetrics.rate}</strong>
           <span>Conversations with a useful result</span>
         </article>
         <article>
           <p>Average duration</p>
-          <strong>{computedMetrics.duration}</strong>
+          <strong>{loading ? "…" : computedMetrics.duration}</strong>
           <span>{computedMetrics.minutes}</span>
         </article>
       </section>
@@ -359,7 +291,12 @@ function ConversationsContent() {
 
         <div className="ruh-conversation-layout">
           <div className="ruh-table-scroll">
-            {filteredConversations.length ? (
+            {loading ? (
+              <div className="ruh-filter-empty">
+                <h2>Loading conversations…</h2>
+                <p>Pulling sessions, transcripts, and outcomes from your workspace.</p>
+              </div>
+            ) : filteredConversations.length ? (
               <table className="ruh-data-table">
                 <thead>
                   <tr>
@@ -408,11 +345,13 @@ function ConversationsContent() {
               </table>
             ) : (
               <div className="ruh-filter-empty">
-                <h2>No conversations match these filters</h2>
-                <p>Clear the filters to see all visitor activity.</p>
-                <button className="ruh-secondary-button" type="button" onClick={clearFilters}>
-                  Clear filters
-                </button>
+                <h2>{conversations.length ? "No conversations match these filters" : "No conversations yet"}</h2>
+                <p>{conversations.length ? "Clear the filters to see all visitor activity." : "Test an agent or install the widget to start recording calls."}</p>
+                {conversations.length ? (
+                  <button className="ruh-secondary-button" type="button" onClick={clearFilters}>
+                    Clear filters
+                  </button>
+                ) : null}
               </div>
             )}
           </div>
@@ -421,7 +360,7 @@ function ConversationsContent() {
             <aside className="ruh-conversation-detail" aria-live="polite">
               <div className="ruh-detail-header">
                 <div>
-                  <p className="ruh-kicker">{activeConversation.id}</p>
+                  <p className="ruh-kicker">{activeConversation.shortId}</p>
                   <h2>{activeConversation.visitor}</h2>
                   <p>{activeConversation.startedAt} · {activeConversation.duration}</p>
                 </div>
@@ -451,23 +390,35 @@ function ConversationsContent() {
                     <dt>Entry page</dt>
                     <dd>{activeConversation.page}</dd>
                   </div>
+                  {activeConversation.leadEmail ? (
+                    <div>
+                      <dt>Email</dt>
+                      <dd>{activeConversation.leadEmail}</dd>
+                    </div>
+                  ) : null}
                 </dl>
               </div>
 
               <div className="ruh-transcript">
                 <h3>Transcript</h3>
-                {activeConversation.messages.map((message, index) => (
-                  <article
-                    className={message.speaker === "Agent" ? "is-agent" : "is-visitor"}
-                    key={`${message.time}-${index}`}
-                  >
-                    <div>
-                      <strong>{message.speaker === "Agent" ? activeConversation.agent : message.speaker}</strong>
-                      <time>{message.time}</time>
-                    </div>
-                    <p>{message.text}</p>
-                  </article>
-                ))}
+                {activeConversation.messages.length ? (
+                  activeConversation.messages.map((message, index) => (
+                    <article
+                      className={message.speaker === "Agent" ? "is-agent" : "is-visitor"}
+                      key={`${message.time}-${index}`}
+                    >
+                      <div>
+                        <strong>{message.speaker === "Agent" ? activeConversation.agent : message.speaker}</strong>
+                        <time>{message.time}</time>
+                      </div>
+                      <p>{message.text}</p>
+                    </article>
+                  ))
+                ) : (
+                  <p style={{ color: "var(--muted)", fontSize: 13 }}>
+                    No transcript recorded for this session. Messages appear after the visitor talks and `/api/brain` saves turns.
+                  </p>
+                )}
               </div>
 
               <div className="ruh-journey-timeline">
@@ -485,7 +436,9 @@ function ConversationsContent() {
                     ))}
                   </ol>
                 ) : (
-                  <p style={{ color: "var(--muted)", fontSize: 13 }}>Page-level journey tracking is not yet enabled for this agent.</p>
+                  <p style={{ color: "var(--muted)", fontSize: 13 }}>
+                    Page-level journey tracking is not yet enabled. It will appear here after the analytics embed ships.
+                  </p>
                 )}
               </div>
             </aside>

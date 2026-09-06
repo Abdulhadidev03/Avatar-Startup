@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-import { openai, OPENAI_MODEL } from "@/lib/openai";
+import { openai, OPENAI_MODEL, OPENAI_REASONING_EFFORT } from "@/lib/openai";
 
 const ANALYZE_PROMPT = `You are an expert sales manager evaluating a recorded sales conversation between an AI avatar salesperson (Sarah) and a website visitor.
 
@@ -92,8 +92,8 @@ export async function POST(req: Request) {
     // 4. Request evaluation from OpenAI
     const response = await openai.chat.completions.create({
       model: OPENAI_MODEL,
-      max_tokens: 300,
-      temperature: 0.2,
+      max_completion_tokens: 300,
+      reasoning_effort: OPENAI_REASONING_EFFORT,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: ANALYZE_PROMPT },

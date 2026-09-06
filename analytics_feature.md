@@ -400,7 +400,7 @@ if (!journeyLine && visitorRowId) {
 
 if (trigger?.greetingHint) {
   const g = await openai.chat.completions.create({
-    model: "gpt-4o-mini", max_tokens: 60,
+    model: "gpt-5.6-terra", max_completion_tokens: 60, reasoning_effort: "low",
     messages: [{ role: "user", content:
       `Write ONE short, warm spoken opening line (max 25 words) for a website sales avatar that just proactively opened. Context: ${trigger.greetingHint}. Visitor is on ${trigger.path} and has been there ${trigger.timeOnPage}s.${journeyLine ? ` Recent journey: ${journeyLine}.` : ""} No markdown, no quotes.` }],
   });
@@ -408,7 +408,7 @@ if (trigger?.greetingHint) {
 } else if (journeyLine) {
   // Manual open — greet from browsing history (direct pass or DB fallback)
   const g = await openai.chat.completions.create({
-    model: "gpt-4o-mini", max_tokens: 60,
+    model: "gpt-5.6-terra", max_completion_tokens: 60, reasoning_effort: "low",
     messages: [{ role: "user", content:
       `Write ONE short, warm spoken opening line (max 25 words) for a website sales avatar. The visitor just opened the chat themselves. Use their recent browsing to sound helpful, not creepy. Recent journey: ${journeyLine}. Current page: ${pageUrl || "unknown"}. No markdown, no quotes.` }],
   });
