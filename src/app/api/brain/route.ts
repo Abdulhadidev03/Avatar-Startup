@@ -149,7 +149,7 @@ export async function POST(req: Request) {
     }
 
     // Fetch enabled knowledge sources for this agent
-    let knowledgeTexts: string[] = [];
+    const knowledgeTexts: string[] = [];
     if (session?.agent_id) {
       const { data: sources } = await supabaseAdmin
         .from("knowledge_sources")
@@ -207,8 +207,13 @@ export async function POST(req: Request) {
       ],
     });
 
+    const rawReply =
+      response.choices[0]?.message?.content ??
+      "Sorry, I didn't catch that. Could you say that again?";
+
+    // Keep model-internal reasoning out of the spoken avatar response.
     const replyText =
-      response.choices[0]?.message?.content?.trim() ||
+      rawReply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim() ||
       "Sorry, I didn't catch that. Could you say that again?";
 
     // Detect if a lead was captured (email mentioned)

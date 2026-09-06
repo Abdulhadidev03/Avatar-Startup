@@ -1,7 +1,9 @@
-import { createClient } from "@supabase/supabase-js";
+"use client";
 
-// Browser-safe Supabase client — uses the public anon key for read-only dashboard queries
-export const supabaseBrowser = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { createBrowserSupabaseClient } from "./supabase/client";
+
+export { createBrowserSupabaseClient } from "./supabase/client";
+
+// Kept for existing dashboard data reads. The implementation now uses the
+// cookie-aware SSR client so browser queries share the authenticated session.
+export const supabaseBrowser = createBrowserSupabaseClient();

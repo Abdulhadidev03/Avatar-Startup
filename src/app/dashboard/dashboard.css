@@ -1302,7 +1302,8 @@
 }
 
 .ruh-profile-menu > a,
-.ruh-profile-menu > button {
+.ruh-profile-menu > button,
+.ruh-profile-signout > button {
   display: flex;
   width: 100%;
   min-height: 38px;
@@ -1319,9 +1320,14 @@
 }
 
 .ruh-profile-menu > a:hover,
-.ruh-profile-menu > button:hover {
+.ruh-profile-menu > button:hover,
+.ruh-profile-signout > button:hover {
   background: var(--surface-strong);
   color: var(--ink);
+}
+
+.ruh-profile-signout {
+  margin: 0;
 }
 
 .ruh-popover-person {

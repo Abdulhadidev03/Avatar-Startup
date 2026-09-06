@@ -6,6 +6,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Icon, type IconName, RuhanaLogo } from "./dashboard-icons";
 
 type NavigationItem = { label: string; href: string; icon: IconName };
+type DashboardShellUser = { displayName: string; email: string | null; initials: string };
 
 const agentNavigation: NavigationItem[] = [
   { label: "My agents", href: "/dashboard/agents", icon: "agents" },
@@ -56,7 +57,7 @@ function getAssistantReply(query: string) {
   return "Today Ruhana handled 46 conversations, completed 27 outcomes, and influenced $2,940 in revenue. Sales performance is strongest on pricing and product comparison pages.";
 }
 
-export function DashboardShell({ children }: { children: React.ReactNode }) {
+export function DashboardShell({ children, user }: { children: React.ReactNode; user: DashboardShellUser }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
@@ -176,13 +177,15 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </button>
           <Link className="ruh-upgrade-button" href="/dashboard/billing">Upgrade</Link>
           <div className="ruh-profile-wrap" ref={profileWrapRef}>
-            <button ref={profileButtonRef} className="ruh-profile-button" type="button" aria-label="Open account menu" aria-controls="ruh-account-popover" aria-expanded={profileOpen} onClick={() => setProfileOpen((value) => !value)}>AH</button>
+            <button ref={profileButtonRef} className="ruh-profile-button" type="button" aria-label={`Open account menu for ${user.displayName}`} aria-controls="ruh-account-popover" aria-expanded={profileOpen} onClick={() => setProfileOpen((value) => !value)}>{user.initials}</button>
             {profileOpen ? (
               <div className="ruh-popover ruh-profile-menu" id="ruh-account-popover" role="group" aria-label="Account actions">
-                <div className="ruh-popover-person"><strong>Abdul Hadi</strong><span>Owner · Ruhana workspace</span></div>
+                <div className="ruh-popover-person"><strong>{user.displayName}</strong><span>{user.email ?? "Authenticated · Ruhana workspace"}</span></div>
                 <Link href="/dashboard/settings" onClick={() => setProfileOpen(false)}>Workspace settings</Link>
                 <Link href="/dashboard/billing" onClick={() => setProfileOpen(false)}>Plan and billing</Link>
-                <button type="button" onClick={() => setProfileOpen(false)}>Sign out</button>
+                <form className="ruh-profile-signout" action="/auth/signout" method="post">
+                  <button type="submit">Sign out</button>
+                </form>
               </div>
             ) : null}
           </div>

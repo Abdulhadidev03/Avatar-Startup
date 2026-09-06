@@ -78,6 +78,7 @@ function ConfigureTab({ agent, onUpdated }: { agent: FrontendAgent; onUpdated: (
   const [instructions, setInstructions] = useState(agent.instructions ?? "Be honest that you do not know, offer a helpful next step, and ask whether the visitor wants a human.");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [customPreview, setCustomPreview] = useState<string | null>(agent.avatarImageUrl ?? null);
+  const [pendingFileName, setPendingFileName] = useState<string | null>(null);
   const fileRef = useRef<File | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
 
@@ -85,6 +86,7 @@ function ConfigureTab({ agent, onUpdated }: { agent: FrontendAgent; onUpdated: (
     if (!file) return;
     if (customPreview?.startsWith("blob:")) URL.revokeObjectURL(customPreview);
     fileRef.current = file;
+    setPendingFileName(file.name);
     setCustomPreview(URL.createObjectURL(file));
     setSaveState("idle");
   }
@@ -121,6 +123,7 @@ function ConfigureTab({ agent, onUpdated }: { agent: FrontendAgent; onUpdated: (
       onUpdated({ name, role, avatarId, avatarImageUrl: avatarImageUrl ?? undefined });
       setSaveState("saved");
       fileRef.current = null;
+      setPendingFileName(null);
       window.setTimeout(() => setSaveState("idle"), 2000);
     } catch {
       setSaveState("error");
@@ -144,14 +147,14 @@ function ConfigureTab({ agent, onUpdated }: { agent: FrontendAgent; onUpdated: (
       <div className="ruh-config-avatar-grid">
         {avatars.map((avatar) => (
           <button
-            className={avatar.id === avatarId && !fileRef.current ? "is-selected" : ""}
+            className={avatar.id === avatarId && !pendingFileName ? "is-selected" : ""}
             type="button"
-            onClick={() => { setAvatarId(avatar.id); fileRef.current = null; setCustomPreview(null); setSaveState("idle"); }}
+            onClick={() => { setAvatarId(avatar.id); fileRef.current = null; setPendingFileName(null); setCustomPreview(null); setSaveState("idle"); }}
             key={avatar.id}
           >
             <AvatarPortrait avatarId={avatar.id} />
             <span>{avatar.name}</span>
-            {avatar.id === avatarId && !fileRef.current ? <Icon name="check" width="13" height="13" /> : null}
+            {avatar.id === avatarId && !pendingFileName ? <Icon name="check" width="13" height="13" /> : null}
           </button>
         ))}
       </div>
@@ -161,7 +164,7 @@ function ConfigureTab({ agent, onUpdated }: { agent: FrontendAgent; onUpdated: (
           <div className="ruh-uploaded-photo">
             <Image src={customPreview} alt="Custom avatar preview" width={80} height={100} unoptimized style={{ borderRadius: 8, objectFit: "cover" }} />
             <div>
-              <strong>{fileRef.current?.name ?? "Current custom photo"}</strong>
+              <strong>{pendingFileName ?? "Current custom photo"}</strong>
               <small>This photo will replace the avatar image.</small>
               <button type="button" onClick={() => uploadRef.current?.click()}>Replace photo</button>
             </div>
@@ -196,6 +199,7 @@ function KnowledgeTab({ agentId }: { agentId: string }) {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [relativeNow, setRelativeNow] = useState(0);
 
   useEffect(() => {
     fetch(`/api/agents/${agentId}/knowledge`).then((r) => r.json()).then((data) => {
@@ -203,8 +207,15 @@ function KnowledgeTab({ agentId }: { agentId: string }) {
     }).finally(() => setLoading(false));
   }, [agentId]);
 
+  useEffect(() => {
+    const updateClock = () => setRelativeNow(Date.now());
+    updateClock();
+    const timer = window.setInterval(updateClock, 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   function timeAgo(iso: string) {
-    const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+    const mins = Math.floor((relativeNow - new Date(iso).getTime()) / 60000);
     if (mins < 1) return "Just now";
     if (mins < 60) return `${mins} min ago`;
     if (mins < 1440) return `${Math.floor(mins / 60)} hours ago`;
@@ -424,7 +435,7 @@ export function AgentWorkspace({ agent: initialAgent, conversations: initialConv
       setTestError(msg);
       setTestStatus("error");
     }
-  }, [agent.id, agent.name, stopTest]);
+  }, [agent.greeting, agent.id, agent.name, stopTest]);
 
   useEffect(() => {
     if (!isUUID(agent.id)) return;

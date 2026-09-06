@@ -14,10 +14,17 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Ruhana",
+    default: "Ruhana · Context-aware video agents",
     template: "%s · Ruhana",
   },
-  description: "Create and deploy intelligent video agents for your website.",
+  description:
+    "Build a high-IQ video agent that understands each visitor's page, intent, and next best action—then deploy it to your website in minutes.",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
+  openGraph: {
+    title: "Ruhana · Context-aware video agents",
+    description: "A sales or support avatar that sees the page, understands intent, and acts.",
+    type: "website",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
