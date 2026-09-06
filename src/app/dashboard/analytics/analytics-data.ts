@@ -4,6 +4,84 @@ export type AnalyticsView = "overview" | "results" | "insights" | "usage";
 
 export type PeriodKey = "7d" | "30d" | "90d";
 
+export type TrendBuckets = {
+  labels: string[];
+  conversations: number[];
+  outcomes: number[];
+  minutes: number[];
+  revenue: number[];
+};
+
+export type OutcomeBreakdownItem = {
+  id: string;
+  label: string;
+  value: number;
+  share: number;
+  kind: "Sales" | "Support";
+};
+
+export type RecentOutcomeItem = {
+  id: string;
+  visitor: string;
+  type: string;
+  kind: "Sales" | "Support";
+  agentId: string;
+  agent: string;
+  siteId: string;
+  source: string;
+  value: string;
+  when: string;
+};
+
+export type TopPageItem = {
+  page: string;
+  title: string;
+  siteId: string;
+  visitors: number;
+  conversations: number;
+  outcomes: number;
+  influence: string;
+};
+
+export type UsageEventItem = {
+  date: string;
+  agentId: string;
+  agent: string;
+  site: string;
+  conversations: number;
+  minutes: number;
+  peak: number;
+};
+
+export type RealAnalytics = {
+  period: PeriodKey;
+  conversations: number;
+  outcomes: number;
+  leads: number;
+  minutes: number;
+  revenue: number;
+  change: {
+    conversations: number;
+    outcomes: number;
+    minutes: number;
+    revenue: number;
+  };
+  agents: Array<{
+    id: string;
+    name: string;
+    role: string;
+    status: string;
+    conversations: number;
+    outcomes: number;
+    minutes: number;
+  }>;
+  trendBuckets?: TrendBuckets;
+  outcomeBreakdown?: OutcomeBreakdownItem[];
+  recentOutcomes?: RecentOutcomeItem[];
+  topPages?: TopPageItem[];
+  usageEvents?: UsageEventItem[];
+};
+
 export type MetricSnapshot = {
   revenue: number;
   outcomes: number;
