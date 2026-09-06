@@ -73,6 +73,190 @@ export async function GET(
   var iframeLoaded = false;
   var started = false;
 
+  // ── Journey & Screen Context Tracking ────────────────────────────────────
+  var recent = [];
+  try {
+    var stored = sessionStorage.getItem('rhn_journey');
+    if (stored) recent = JSON.parse(stored);
+  } catch (e) {}
+
+  function pushJourney(event) {
+    recent.push(event);
+    if (recent.length > 20) recent.shift();
+    try {
+      sessionStorage.setItem('rhn_journey', JSON.stringify(recent));
+    } catch (e) {}
+  }
+
+  var lastClickDesc = null;
+
+  function getScrollDepth() {
+    try {
+      var scrollY = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+      var winH = window.innerHeight || 1;
+      var docH = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight || 1);
+      return Math.min(100, Math.max(0, Math.round((scrollY + winH) / docH * 100)));
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  function getVisibleSection() {
+    try {
+      var candidates = document.querySelectorAll('h1, h2, h3, [data-section], section[aria-label]');
+      var best = null;
+      var bestDist = Infinity;
+      var vh = window.innerHeight || 800;
+      for (var i = 0; i < candidates.length; i++) {
+        var el = candidates[i];
+        var rect = el.getBoundingClientRect();
+        // Look for headings in upper portion of viewport (between -40px and 60% down)
+        if (rect.top >= -40 && rect.top <= vh * 0.6) {
+          var dist = Math.abs(rect.top - 80);
+          if (dist < bestDist) {
+            bestDist = dist;
+            best = el;
+          }
+        }
+      }
+      if (best) {
+        var txt = (best.innerText || best.getAttribute('aria-label') || '').trim();
+        if (txt) return txt.replace(/\\s+/g, ' ').slice(0, 80);
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function getLiveContext() {
+    return {
+      url: location.href,
+      path: location.pathname,
+      scrollDepth: getScrollDepth(),
+      visibleSection: getVisibleSection(),
+      lastClick: lastClickDesc
+    };
+  }
+
+  function sendLiveUpdate() {
+    if (!open || !iframeLoaded) return;
+    try {
+      panel.contentWindow.postMessage({
+        type: 'LIVE_CONTEXT_UPDATE',
+        liveContext: getLiveContext(),
+        recentEvents: recent.slice(-15)
+      }, ORIGIN);
+    } catch (e) {}
+  }
+
+  // Record initial page view
+  pushJourney({
+    type: 'page_view',
+    path: location.pathname,
+    title: document.title || location.pathname,
+    ts: Date.now()
+  });
+
+  // Track page navigation (SPA + normal)
+  var pageStart = Date.now();
+  var lastPath = location.pathname;
+
+  function onNavigation() {
+    if (location.pathname === lastPath) return;
+    pushJourney({
+      type: 'page_time',
+      path: lastPath,
+      seconds: Math.max(1, Math.round((Date.now() - pageStart) / 1000)),
+      ts: Date.now()
+    });
+    lastPath = location.pathname;
+    pageStart = Date.now();
+    pushJourney({
+      type: 'page_view',
+      path: location.pathname,
+      title: document.title || location.pathname,
+      ts: Date.now()
+    });
+    sendLiveUpdate();
+  }
+
+  var origPush = history.pushState;
+  if (origPush) {
+    history.pushState = function () {
+      origPush.apply(this, arguments);
+      onNavigation();
+    };
+  }
+  var origReplace = history.replaceState;
+  if (origReplace) {
+    history.replaceState = function () {
+      origReplace.apply(this, arguments);
+      onNavigation();
+    };
+  }
+  window.addEventListener('popstate', onNavigation);
+  window.addEventListener('pagehide', function () {
+    pushJourney({
+      type: 'page_time',
+      path: location.pathname,
+      seconds: Math.max(1, Math.round((Date.now() - pageStart) / 1000)),
+      ts: Date.now()
+    });
+  });
+
+  // Click tracking (interactive elements only: buttons, links)
+  document.addEventListener('click', function (ev) {
+    try {
+      var target = ev.target;
+      if (!target || !target.closest) return;
+      var el = target.closest('a, button, [role="button"], input[type="submit"], input[type="button"]');
+      if (!el) return;
+
+      // Ignore clicks on launcher itself
+      if (launcher.contains(el)) return;
+
+      var tag = el.tagName.toLowerCase();
+      var rawText = (el.innerText || el.value || el.getAttribute('aria-label') || '').trim().replace(/\\s+/g, ' ');
+      var text = rawText.slice(0, 50);
+      var href = el.getAttribute('href') || null;
+
+      lastClickDesc = (text ? '"' + text + '" ' : '') + '(' + tag + (href ? ' to ' + href : '') + ')';
+
+      pushJourney({
+        type: 'click',
+        path: location.pathname,
+        tag: tag,
+        text: text || null,
+        href: href,
+        ts: Date.now()
+      });
+
+      sendLiveUpdate();
+    } catch (e) {}
+  }, true);
+
+  // Scroll tracking (debounced live update + milestone recording)
+  var scrollMarks = {};
+  var scrollDebounceTimer = null;
+  window.addEventListener('scroll', function () {
+    var depth = getScrollDepth();
+    [25, 50, 75, 100].forEach(function (m) {
+      if (depth >= m && !scrollMarks[m]) {
+        scrollMarks[m] = true;
+        pushJourney({
+          type: 'scroll',
+          path: location.pathname,
+          depth: m,
+          ts: Date.now()
+        });
+      }
+    });
+
+    if (open && iframeLoaded) {
+      if (scrollDebounceTimer) clearTimeout(scrollDebounceTimer);
+      scrollDebounceTimer = setTimeout(sendLiveUpdate, 350);
+    }
+  }, { passive: true });
+
   // ── Hydrate launcher with agent name/avatar immediately ──────────────────
   try {
     fetch(ORIGIN + '/api/agents/' + AGENT_ID)
@@ -105,12 +289,25 @@ export async function GET(
       panel.addEventListener('load', function () {
         if (!started) {
           started = true;
-          panel.contentWindow.postMessage({ type: 'WIDGET_START', pageUrl: window.location.href }, ORIGIN);
+          panel.contentWindow.postMessage({
+            type: 'WIDGET_START',
+            pageUrl: window.location.href,
+            liveContext: getLiveContext(),
+            recentEvents: recent.slice(-15)
+          }, ORIGIN);
         }
       });
     } else if (open && iframeLoaded && !started) {
       started = true;
-      panel.contentWindow.postMessage({ type: 'WIDGET_START', pageUrl: window.location.href }, ORIGIN);
+      panel.contentWindow.postMessage({
+        type: 'WIDGET_START',
+        pageUrl: window.location.href,
+        liveContext: getLiveContext(),
+        recentEvents: recent.slice(-15)
+      }, ORIGIN);
+    } else if (open && iframeLoaded && started) {
+      // Re-opened: push fresh live context
+      sendLiveUpdate();
     }
   }
   launcher.addEventListener('click', toggle);

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   agents as mockAgents,
   funnel,
@@ -19,17 +20,14 @@ import {
   usageEvents,
   type AnalyticsView,
   type MetricSnapshot,
+  type OutcomeBreakdownItem,
   type PeriodKey,
+  type RealAnalytics,
+  type RecentOutcomeItem,
+  type TopPageItem,
+  type TrendBuckets,
+  type UsageEventItem,
 } from "./analytics-data";
-
-type RealAnalytics = {
-  conversations: number;
-  outcomes: number;
-  leads: number;
-  minutes: number;
-  change: { conversations: number; outcomes: number; minutes: number };
-  agents: Array<{ id: string; name: string; role: string; status: string; conversations: number; outcomes: number; minutes: number }>;
-} | null;
 
 type AgentFilter = "all" | string;
 type AnalyticsAgent = (typeof mockAgents)[number];
@@ -94,7 +92,7 @@ function getFilteredSnapshot(
   const snapshot = periodSnapshots[period];
   const base = periodSnapshots["30d"];
   const site = sites.find((item) => item.id === siteId);
-  const agent = mockAgents.find((item) => item.id === agentId);
+  const agent = agentOptions.find((item) => item.id === agentId);
 
   if (site && agent && site.agentId !== agent.id) {
     return {
@@ -283,18 +281,30 @@ function TrendChart({
   metric,
   metrics,
   period,
+  realTrendBuckets,
 }: {
   metric: TrendMetric;
   metrics: MetricSnapshot;
   period: PeriodKey;
+  realTrendBuckets?: TrendBuckets;
 }) {
   const series = trendSeries[metric];
-  const labels = trendLabels[period];
-  const baselineTotal = periodSnapshots[period][metric];
-  const selectedTotal = metrics[metric];
-  const values = series.values[period].map((value) =>
-    Math.round(value * (selectedTotal / baselineTotal)),
+  const hasRealBuckets = Boolean(
+    realTrendBuckets &&
+    realTrendBuckets.labels.length > 0 &&
+    realTrendBuckets[metric]?.some((v) => v > 0)
   );
+
+  const labels = hasRealBuckets && realTrendBuckets ? realTrendBuckets.labels : trendLabels[period];
+  const values = hasRealBuckets && realTrendBuckets
+    ? realTrendBuckets[metric]
+    : (() => {
+        const baselineTotal = periodSnapshots[period][metric];
+        const selectedTotal = metrics[metric];
+        return series.values[period].map((value) =>
+          Math.round(value * (baselineTotal > 0 ? selectedTotal / baselineTotal : 1)),
+        );
+      })();
   const maximum = Math.max(1, ...values);
 
   return (
@@ -309,14 +319,15 @@ function TrendChart({
         <div className="ruh-analytics-bars">
           {values.map((value, index) => {
             const formatted = series.formatter === "currency" ? formatCurrency(value) : formatNumber(value);
+            const label = labels[index] ?? `Day ${index + 1}`;
             return (
-              <div className="ruh-analytics-bar-column" key={labels[index]}>
+              <div className="ruh-analytics-bar-column" key={`${label}-${index}`}>
                 <span
                   className="ruh-analytics-bar"
                   style={{ "--bar-size": `${value ? Math.max(8, (value / maximum) * 100) : 0}%` } as VariableStyle}
-                  title={`${labels[index]}: ${formatted}`}
+                  title={`${label}: ${formatted}`}
                 />
-                <small>{labels[index]}</small>
+                <small>{label}</small>
               </div>
             );
           })}
@@ -326,12 +337,15 @@ function TrendChart({
         <caption>{series.label} trend over the selected period</caption>
         <thead><tr><th scope="col">Date</th><th scope="col">{series.label}</th></tr></thead>
         <tbody>
-          {values.map((value, index) => (
-            <tr key={labels[index]}>
-              <th scope="row">{labels[index]}</th>
-              <td>{series.formatter === "currency" ? formatCurrency(value) : formatNumber(value)}</td>
-            </tr>
-          ))}
+          {values.map((value, index) => {
+            const label = labels[index] ?? `Day ${index + 1}`;
+            return (
+              <tr key={`${label}-${index}`}>
+                <th scope="row">{label}</th>
+                <td>{series.formatter === "currency" ? formatCurrency(value) : formatNumber(value)}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </>
@@ -378,12 +392,14 @@ function Overview({
   period,
   siteFilter,
   agentList,
+  realTrendBuckets,
 }: {
   metrics: MetricSnapshot;
   agentFilter: AgentFilter;
   period: PeriodKey;
   siteFilter: SiteFilter;
   agentList: readonly { id: string; name: string; role: string; status: string; conversations: number; outcomes: number; revenue: number; minutes?: number }[];
+  realTrendBuckets?: TrendBuckets;
 }) {
   const [trendMetric, setTrendMetric] = useState<TrendMetric>("revenue");
   const periodSnapshot = periodSnapshots[period];
@@ -421,7 +437,7 @@ function Overview({
               </div>
             }
           />
-          <TrendChart metric={trendMetric} metrics={metrics} period={period} />
+          <TrendChart metric={trendMetric} metrics={metrics} period={period} realTrendBuckets={realTrendBuckets} />
         </section>
 
         <section className="ruh-data-card">
@@ -488,14 +504,36 @@ function Outcomes({
   metrics,
   siteFilter,
   agentFilter,
+  realOutcomeBreakdown,
+  realRecentOutcomes,
 }: {
   metrics: MetricSnapshot;
   siteFilter: SiteFilter;
   agentFilter: AgentFilter;
+  realOutcomeBreakdown?: OutcomeBreakdownItem[];
+  realRecentOutcomes?: RecentOutcomeItem[];
 }) {
   const [kind, setKind] = useState<OutcomeKind>("All");
-  const outcomeScale = metrics.outcomes / periodSnapshots["30d"].outcomes;
-  const visibleOutcomes = recentOutcomes.filter(
+  const outcomeScale = metrics.outcomes / (periodSnapshots["30d"].outcomes || 1);
+
+  const breakdown = useMemo(() => {
+    if (realOutcomeBreakdown && realOutcomeBreakdown.some((b) => b.value > 0)) {
+      return realOutcomeBreakdown;
+    }
+    return outcomeBreakdown.map((item) => ({
+      ...item,
+      value: Math.round(item.value * outcomeScale),
+    }));
+  }, [realOutcomeBreakdown, outcomeScale]);
+
+  const outcomesList = useMemo(() => {
+    if (realRecentOutcomes && realRecentOutcomes.length > 0) {
+      return realRecentOutcomes;
+    }
+    return recentOutcomes as unknown as RecentOutcomeItem[];
+  }, [realRecentOutcomes]);
+
+  const visibleOutcomes = outcomesList.filter(
     (outcome) =>
       (kind === "All" || outcome.kind === kind) &&
       (siteFilter === "all" || outcome.siteId === siteFilter) &&
@@ -505,10 +543,10 @@ function Outcomes({
   return (
     <>
       <section className="ruh-outcome-kpis" aria-label="Outcome totals">
-        {outcomeBreakdown.map((outcome) => (
+        {breakdown.map((outcome) => (
           <article className="ruh-data-card ruh-outcome-kpi" key={outcome.id}>
             <span>{outcome.label}</span>
-            <strong>{formatNumber(outcome.value * outcomeScale)}</strong>
+            <strong>{formatNumber(outcome.value)}</strong>
             <small>{outcome.share}% of generated outcomes</small>
           </article>
         ))}
@@ -530,11 +568,11 @@ function Outcomes({
             description={`${formatNumber(metrics.outcomes)} measurable results in this view.`}
           />
           <div className="ruh-ranked-bars">
-            {outcomeBreakdown.map((outcome) => (
+            {breakdown.map((outcome) => (
               <div key={outcome.id}>
                 <span>
                   <strong>{outcome.label}</strong>
-                  <small>{formatNumber(outcome.value * outcomeScale)}</small>
+                  <small>{formatNumber(outcome.value)}</small>
                 </span>
                 <div><i style={{ "--rank-size": `${outcome.share}%` } as VariableStyle} /></div>
               </div>
@@ -598,18 +636,38 @@ function Outcomes({
   );
 }
 
-function Insights({ metrics, period, siteFilter, agentFilter }: { metrics: MetricSnapshot; period: PeriodKey; siteFilter: SiteFilter; agentFilter: AgentFilter }) {
+function Insights({
+  metrics,
+  period,
+  siteFilter,
+  agentFilter,
+  realTopPages,
+}: {
+  metrics: MetricSnapshot;
+  period: PeriodKey;
+  siteFilter: SiteFilter;
+  agentFilter: AgentFilter;
+  realTopPages?: TopPageItem[];
+}) {
   const [signalView, setSignalView] = useState<SignalView>("intent");
   const signals = signalView === "intent" ? intentSignals : objections;
   const maximum = Math.max(...signals.map((signal) => signal.value));
-  const insightScale = metrics.conversations / periodSnapshots["30d"].conversations;
+  const insightScale = metrics.conversations / (periodSnapshots["30d"].conversations || 1);
   const selectedAgent = agentFilter === "all" ? null : agentFilter;
-  const visiblePages = topPages.filter((page) => {
+
+  const pagesList = useMemo(() => {
+    if (realTopPages && realTopPages.length > 0) {
+      return realTopPages;
+    }
+    return topPages as unknown as TopPageItem[];
+  }, [realTopPages]);
+
+  const pagePeriodScale = periodSnapshots[period].conversations / (periodSnapshots["30d"].conversations || 1);
+  const visiblePages = pagesList.filter((page) => {
     const pageSite = sites.find((site) => site.id === page.siteId);
     return (siteFilter === "all" || page.siteId === siteFilter) &&
       (!selectedAgent || pageSite?.agentId === selectedAgent);
   });
-  const pagePeriodScale = periodSnapshots[period].conversations / periodSnapshots["30d"].conversations;
 
   return (
     <>
@@ -724,12 +782,16 @@ function Usage({
   siteFilter,
   agentFilter,
   agentList,
+  realTrendBuckets,
+  realUsageEvents,
 }: {
   metrics: MetricSnapshot;
   period: PeriodKey;
   siteFilter: SiteFilter;
   agentFilter: AgentFilter;
   agentList: readonly { id: string; name: string; role: string; status: string; conversations: number; outcomes: number; revenue: number; minutes?: number }[];
+  realTrendBuckets?: TrendBuckets;
+  realUsageEvents?: UsageEventItem[];
 }) {
   const [trendMetric, setTrendMetric] = useState<TrendMetric>("minutes");
   const allowance = 10000;
@@ -741,9 +803,17 @@ function Usage({
       (agentFilter === "all" || item.id === agentFilter) &&
       (!selectedSite || selectedSite.agentId === item.id),
   );
-  const conversationPeriodScale = periodSnapshots[period].conversations / periodSnapshots["30d"].conversations;
-  const minutePeriodScale = periodSnapshots[period].minutes / periodSnapshots["30d"].minutes;
-  const visibleEvents = usageEvents.filter(
+  const conversationPeriodScale = periodSnapshots[period].conversations / (periodSnapshots["30d"].conversations || 1);
+  const minutePeriodScale = periodSnapshots[period].minutes / (periodSnapshots["30d"].minutes || 1);
+
+  const eventsList = useMemo(() => {
+    if (realUsageEvents && realUsageEvents.length > 0) {
+      return realUsageEvents;
+    }
+    return usageEvents as unknown as UsageEventItem[];
+  }, [realUsageEvents]);
+
+  const visibleEvents = eventsList.filter(
     (event) =>
       (agentFilter === "all" || event.agentId === agentFilter) &&
       (siteFilter === "all" || sites.find((site) => site.id === siteFilter)?.name === event.site),
@@ -779,7 +849,7 @@ function Usage({
               </div>
             }
           />
-          <TrendChart metric={trendMetric} metrics={metrics} period={period} />
+          <TrendChart metric={trendMetric} metrics={metrics} period={period} realTrendBuckets={realTrendBuckets} />
         </section>
 
         <aside className="ruh-data-card ruh-plan-usage">
@@ -857,51 +927,85 @@ function Usage({
   );
 }
 
-export function AnalyticsDashboard({ view }: { view: AnalyticsView }) {
-  const [period, setPeriod] = useState<PeriodKey>("30d");
-  const [site, setSite] = useState<SiteFilter>("all");
-  const [agent, setAgent] = useState<AgentFilter>("all");
-  const [realData, setRealData] = useState<RealAnalytics>(null);
+function AnalyticsDashboardInner({ view }: { view: AnalyticsView }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const urlPeriod = searchParams.get("period") as PeriodKey | null;
+  const urlSite = searchParams.get("site") as SiteFilter | null;
+  const urlAgent = searchParams.get("agent") as AgentFilter | null;
+
+  const [period, setPeriodState] = useState<PeriodKey>(
+    urlPeriod && ["7d", "30d", "90d"].includes(urlPeriod) ? urlPeriod : "30d"
+  );
+  const [site, setSiteState] = useState<SiteFilter>(urlSite || "all");
+  const [agent, setAgentState] = useState<AgentFilter>(urlAgent || "all");
+  const [realData, setRealData] = useState<RealAnalytics | null>(null);
   const content = pageContent[view];
+
+  const updateFilters = (newPeriod: PeriodKey, newSite: SiteFilter, newAgent: AgentFilter) => {
+    setPeriodState(newPeriod);
+    setSiteState(newSite);
+    setAgentState(newAgent);
+
+    const params = new URLSearchParams();
+    if (newPeriod !== "30d") params.set("period", newPeriod);
+    if (newSite !== "all") params.set("site", newSite);
+    if (newAgent !== "all") params.set("agent", newAgent);
+    const qs = params.toString();
+    router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+  };
 
   useEffect(() => {
     async function loadAnalytics() {
       try {
-        const res = await fetch(`/api/analytics?period=${period}`);
+        const query = new URLSearchParams({ period });
+        if (agent !== "all") query.set("agentId", agent);
+        if (site !== "all") query.set("siteId", site);
+        const res = await fetch(`/api/analytics?${query.toString()}`);
         if (res.ok) {
-          const data = await res.json();
-          if (data.conversations > 0 || data.agents?.length > 0) {
+          const data: RealAnalytics = await res.json();
+          if (data.conversations > 0 || data.agents?.length > 0 || data.outcomes > 0) {
             setRealData(data);
           }
         }
       } catch {
-        // Use mock data
+        // Use mock data fallback
       }
     }
     loadAnalytics();
-  }, [period]);
+  }, [period, agent, site]);
+
+  const agents = realData?.agents?.length
+    ? realData.agents.map((a) => ({
+        ...a,
+        revenue: a.outcomes * 450,
+        website: "northstar",
+        status: (a.status as AnalyticsAgent["status"]) || "Active",
+        avatarId: "sarah",
+        conversionRate: a.conversations ? `${Math.round((a.outcomes / a.conversations) * 100)}%` : "0%",
+        lastActive: "Today",
+      }))
+    : mockAgents;
 
   const metrics = useMemo(() => {
-    if (realData) {
+    if (realData && (realData.conversations > 0 || realData.outcomes > 0)) {
       return {
-        revenue: 0,
+        revenue: realData.revenue ?? realData.outcomes * 450,
         outcomes: realData.outcomes,
         conversations: realData.conversations,
         minutes: realData.minutes,
         change: {
-          revenue: 0,
+          revenue: realData.change.revenue ?? realData.change.outcomes,
           outcomes: realData.change.outcomes,
           conversations: realData.change.conversations,
           minutes: realData.change.minutes,
         },
       } satisfies MetricSnapshot;
     }
-    return getFilteredSnapshot(period, site, agent);
-  }, [realData, period, site, agent]);
-
-  const agents = realData?.agents?.length
-    ? realData.agents.map((a) => ({ ...a, revenue: 0 }))
-    : mockAgents;
+    return getFilteredSnapshot(period, site, agent, agents);
+  }, [realData, period, site, agent, agents]);
 
   return (
     <div className="ruh-page-stack ruh-analytics-page">
@@ -921,18 +1025,59 @@ export function AnalyticsDashboard({ view }: { view: AnalyticsView }) {
         period={period}
         site={site}
         agent={agent}
-        onPeriodChange={setPeriod}
-        onSiteChange={setSite}
-        onAgentChange={setAgent}
+        onPeriodChange={(p) => updateFilters(p, site, agent)}
+        onSiteChange={(s) => updateFilters(period, s, agent)}
+        onAgentChange={(a) => updateFilters(period, site, a)}
         agentList={agents}
       />
 
-      {view === "overview" ? <Overview metrics={metrics} agentFilter={agent} period={period} siteFilter={site} agentList={agents} /> : null}
-      {view === "results" ? <Outcomes metrics={metrics} siteFilter={site} agentFilter={agent} /> : null}
-      {view === "insights" ? <Insights metrics={metrics} period={period} siteFilter={site} agentFilter={agent} /> : null}
+      {view === "overview" ? (
+        <Overview
+          metrics={metrics}
+          agentFilter={agent}
+          period={period}
+          siteFilter={site}
+          agentList={agents}
+          realTrendBuckets={realData?.trendBuckets}
+        />
+      ) : null}
+      {view === "results" ? (
+        <Outcomes
+          metrics={metrics}
+          siteFilter={site}
+          agentFilter={agent}
+          realOutcomeBreakdown={realData?.outcomeBreakdown}
+          realRecentOutcomes={realData?.recentOutcomes}
+        />
+      ) : null}
+      {view === "insights" ? (
+        <Insights
+          metrics={metrics}
+          period={period}
+          siteFilter={site}
+          agentFilter={agent}
+          realTopPages={realData?.topPages}
+        />
+      ) : null}
       {view === "usage" ? (
-        <Usage metrics={metrics} period={period} siteFilter={site} agentFilter={agent} agentList={agents} />
+        <Usage
+          metrics={metrics}
+          period={period}
+          siteFilter={site}
+          agentFilter={agent}
+          agentList={agents}
+          realTrendBuckets={realData?.trendBuckets}
+          realUsageEvents={realData?.usageEvents}
+        />
       ) : null}
     </div>
+  );
+}
+
+export function AnalyticsDashboard({ view }: { view: AnalyticsView }) {
+  return (
+    <Suspense fallback={<div className="ruh-page-stack ruh-analytics-page"><p>Loading analytics...</p></div>}>
+      <AnalyticsDashboardInner view={view} />
+    </Suspense>
   );
 }

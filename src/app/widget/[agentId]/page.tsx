@@ -28,6 +28,14 @@ export default function WidgetPage({ params }: { params: Promise<{ agentId: stri
   const sessionIdRef = useRef<string | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const greetingRef = useRef<string>("Hi! How can I help you today?");
+  const liveContextRef = useRef<{
+    url?: string;
+    path?: string;
+    scrollDepth?: number;
+    visibleSection?: string;
+    lastClick?: string;
+  } | null>(null);
+  const recentEventsRef = useRef<any[]>([]);
 
   // Auto-scroll transcript
   useEffect(() => {
@@ -64,7 +72,13 @@ export default function WidgetPage({ params }: { params: Promise<{ agentId: stri
       const res = await fetch("/api/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agentId, pageUrl: pageUrl ?? window.location.href, orientation: "portrait" }),
+        body: JSON.stringify({
+          agentId,
+          pageUrl: pageUrl ?? window.location.href,
+          orientation: "portrait",
+          liveContext: liveContextRef.current,
+          recentEvents: recentEventsRef.current,
+        }),
       });
 
       if (!res.ok) {
@@ -113,7 +127,12 @@ export default function WidgetPage({ params }: { params: Promise<{ agentId: stri
           const brainRes = await fetch("/api/brain", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sessionId: sid, userText: text }),
+            body: JSON.stringify({
+              sessionId: sid,
+              userText: text,
+              liveContext: liveContextRef.current,
+              recentEvents: recentEventsRef.current,
+            }),
           });
 
           if (!brainRes.ok) return;
@@ -137,21 +156,36 @@ export default function WidgetPage({ params }: { params: Promise<{ agentId: stri
 
   // Start the call when the iframe becomes visible (user opened the widget)
   useEffect(() => {
-    if (status !== "idle") return;
-
     // Listen for parent postMessage
     function onMessage(ev: MessageEvent) {
       if (ev.data?.type === "WIDGET_START") {
-        const pageUrl = ev.data.pageUrl || document.referrer || window.location.href;
-        startCall(pageUrl);
+        if (ev.data.liveContext) {
+          liveContextRef.current = ev.data.liveContext;
+        }
+        if (Array.isArray(ev.data.recentEvents)) {
+          recentEventsRef.current = ev.data.recentEvents;
+        }
+        if (status === "idle") {
+          const pageUrl = ev.data.pageUrl || document.referrer || window.location.href;
+          startCall(pageUrl);
+        }
+      } else if (ev.data?.type === "LIVE_CONTEXT_UPDATE") {
+        if (ev.data.liveContext) {
+          liveContextRef.current = ev.data.liveContext;
+        }
+        if (Array.isArray(ev.data.recentEvents)) {
+          recentEventsRef.current = ev.data.recentEvents;
+        }
       }
     }
     window.addEventListener("message", onMessage);
 
-    // Fallback: if no postMessage arrives within 500ms, auto-start
+    // Fallback: if no postMessage arrives within 500ms and still idle, auto-start
     const fallback = setTimeout(() => {
-      const pageUrl = document.referrer || window.location.href;
-      startCall(pageUrl);
+      if (status === "idle") {
+        const pageUrl = document.referrer || window.location.href;
+        startCall(pageUrl);
+      }
     }, 500);
 
     return () => {
@@ -180,7 +214,12 @@ export default function WidgetPage({ params }: { params: Promise<{ agentId: stri
       const brainRes = await fetch("/api/brain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: sessionIdRef.current, userText: text }),
+        body: JSON.stringify({
+          sessionId: sessionIdRef.current,
+          userText: text,
+          liveContext: liveContextRef.current,
+          recentEvents: recentEventsRef.current,
+        }),
       });
       if (brainRes.ok) {
         const { replyText } = await brainRes.json();

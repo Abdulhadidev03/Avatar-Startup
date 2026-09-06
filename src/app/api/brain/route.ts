@@ -22,11 +22,51 @@ LEAD CAPTURE:
 - Don't be pushy — weave it in naturally, like "By the way, I'd love to send you more details — what's a good email for you?"
 - If they give their email, confirm it back to them.`;
 
+interface LiveContext {
+  url?: string;
+  path?: string;
+  scrollDepth?: number;
+  visibleSection?: string;
+  lastClick?: string;
+}
+
+interface JourneyEvent {
+  type: string;
+  path?: string;
+  title?: string;
+  tag?: string;
+  text?: string;
+  href?: string;
+  seconds?: number;
+  depth?: number;
+  ts?: number;
+}
+
+function formatJourney(events: JourneyEvent[]): string {
+  if (!Array.isArray(events) || events.length === 0) return "";
+  const steps: string[] = [];
+  for (const e of events.slice(-8)) {
+    if (e.type === "page_view") {
+      steps.push(`Viewed ${e.path || "page"}${e.title && e.title !== e.path ? ` ("${e.title}")` : ""}`);
+    } else if (e.type === "page_time") {
+      steps.push(`Spent ${e.seconds ?? "?"}s on ${e.path || "page"}`);
+    } else if (e.type === "click") {
+      const label = e.text ? `"${e.text}"` : (e.tag || "button");
+      steps.push(`Clicked ${label} on ${e.path || "page"}`);
+    } else if (e.type === "scroll") {
+      steps.push(`Scrolled to ${e.depth ?? 0}% on ${e.path || "page"}`);
+    }
+  }
+  return steps.join(" → ");
+}
+
 function buildSystemPrompt(
   agentName: string,
   profileText?: string,
   customInstructions?: string,
   knowledgeTexts?: string[],
+  liveContext?: LiveContext,
+  recentEvents?: JourneyEvent[],
 ): string {
   let prompt = BASE_PROMPT_TEMPLATE(agentName);
   if (customInstructions) prompt += `\n\nADDITIONAL INSTRUCTIONS:\n${customInstructions}`;
@@ -35,12 +75,34 @@ function buildSystemPrompt(
     prompt += `\n\nKNOWLEDGE BASE (use this information to answer visitor questions accurately):\n`;
     prompt += knowledgeTexts.join("\n\n---\n\n");
   }
+
+  if (liveContext) {
+    const details: string[] = [];
+    if (liveContext.path) details.push(`- Current page URL / path: ${liveContext.path}`);
+    if (typeof liveContext.scrollDepth === "number") details.push(`- Current page scroll position: ${liveContext.scrollDepth}% down the page`);
+    if (liveContext.visibleSection) details.push(`- Section currently in visitor's viewport: "${liveContext.visibleSection}"`);
+    if (liveContext.lastClick) details.push(`- Most recent click interaction: ${liveContext.lastClick}`);
+
+    if (details.length > 0) {
+      prompt += `\n\nLIVE VISITOR SCREEN CONTEXT (what the visitor is seeing right now on their screen):\n` +
+        details.join("\n") +
+        `\nGUIDANCE: You know what they are looking at right now. If the visitor refers to "this plan", "this price", or asks what they should do next, use this live context naturally. Speak like an observant, helpful human salesperson, never robotic.`;
+    }
+  }
+
+  const journeyText = formatJourney(recentEvents || []);
+  if (journeyText) {
+    prompt += `\n\nVISITOR BROWSING HISTORY (what they have done on the site so far during this visit):\n` +
+      journeyText +
+      `\nGUIDANCE: You can seamlessly connect their past browsing (e.g. features or plans they checked) to your answers.`;
+  }
+
   return prompt;
 }
 
 export async function POST(req: Request) {
   try {
-    const { sessionId, userText } = await req.json();
+    const { sessionId, userText, liveContext, recentEvents } = await req.json();
 
     if (!sessionId || !userText) {
       return NextResponse.json(
@@ -133,7 +195,17 @@ export async function POST(req: Request) {
       model: "qwen/qwen3.8-27b",
       max_tokens: 200,
       messages: [
-        { role: "system", content: buildSystemPrompt(agentName, profileText, customInstructions, knowledgeTexts) },
+        {
+          role: "system",
+          content: buildSystemPrompt(
+            agentName,
+            profileText,
+            customInstructions,
+            knowledgeTexts,
+            liveContext,
+            recentEvents
+          ),
+        },
         ...messages,
       ],
     });
