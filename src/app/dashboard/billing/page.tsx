@@ -3,19 +3,20 @@
 import { useCallback, useState } from "react";
 import { PageHeader } from "../dashboard-ui";
 import { useDialogFocus } from "../use-dialog-focus";
+import { selfServePricingPlans, type SelfServePlanName } from "@/lib/pricing";
 
-type PlanName = "Starter" | "Growth" | "Scale";
+type PlanName = SelfServePlanName;
 
 const plans: Record<PlanName, { price: number; minutes: number; agents: number; description: string }> = {
-  Starter: { price: 79, minutes: 2500, agents: 2, description: "For one site getting its first agent live." },
-  Growth: { price: 249, minutes: 10000, agents: 5, description: "For teams growing sales and support outcomes." },
-  Scale: { price: 699, minutes: 35000, agents: 15, description: "For larger teams, traffic, and multiple websites." },
+  Launch: { price: selfServePricingPlans[0].priceMonthly, minutes: selfServePricingPlans[0].minutes, agents: 1, description: selfServePricingPlans[0].description },
+  Growth: { price: selfServePricingPlans[1].priceMonthly, minutes: selfServePricingPlans[1].minutes, agents: 3, description: selfServePricingPlans[1].description },
+  Scale: { price: selfServePricingPlans[2].priceMonthly, minutes: selfServePricingPlans[2].minutes, agents: 10, description: selfServePricingPlans[2].description },
 };
 
 const invoices = [
-  { id: "INV-2026-0828", date: "Aug 28, 2026", description: "Growth plan", amount: "$249.00", status: "Paid" },
-  { id: "INV-2026-0728", date: "Jul 28, 2026", description: "Growth plan", amount: "$249.00", status: "Paid" },
-  { id: "INV-2026-0628", date: "Jun 28, 2026", description: "Growth plan", amount: "$249.00", status: "Paid" },
+  { id: "INV-2026-0828", date: "Aug 28, 2026", description: "Growth plan", amount: "$129.00", status: "Paid" },
+  { id: "INV-2026-0728", date: "Jul 28, 2026", description: "Growth plan", amount: "$129.00", status: "Paid" },
+  { id: "INV-2026-0628", date: "Jun 28, 2026", description: "Growth plan", amount: "$129.00", status: "Paid" },
 ];
 
 export default function BillingPage() {
@@ -29,7 +30,11 @@ export default function BillingPage() {
   const dialogRef = useDialogFocus(Boolean(dialog), closeDialog);
 
   const activePlan = plans[plan];
-  const usagePercent = Math.min(100, Math.round((4820 / activePlan.minutes) * 100));
+  const usedMinutes = 268;
+  const projectedMinutes = 341;
+  const usagePercent = Math.min(100, Math.round((usedMinutes / activePlan.minutes) * 100));
+  const activeAgents = Math.min(3, activePlan.agents);
+  const projectedOverage = Math.max(0, projectedMinutes - activePlan.minutes);
 
   function applyPlan() {
     setPlan(pendingPlan);
@@ -96,7 +101,7 @@ export default function BillingPage() {
           <dl className="ruh-plan-facts">
             <div><dt>Renews</dt><dd>September 28, 2026</dd></div>
             <div><dt>Included minutes</dt><dd>{activePlan.minutes.toLocaleString()}</dd></div>
-            <div><dt>Active agents</dt><dd>3 of {activePlan.agents}</dd></div>
+            <div><dt>Active agents</dt><dd>{activeAgents} of {activePlan.agents}</dd></div>
           </dl>
         </section>
 
@@ -108,18 +113,18 @@ export default function BillingPage() {
             </div>
             <span>{usagePercent}% used</span>
           </div>
-          <div className="ruh-usage-progress" role="progressbar" aria-label="Billing-cycle minute allowance" aria-valuemin={0} aria-valuemax={activePlan.minutes} aria-valuenow={Math.min(4820, activePlan.minutes)} aria-valuetext={`4,820 of ${activePlan.minutes.toLocaleString()} minutes used`}>
+          <div className="ruh-usage-progress" role="progressbar" aria-label="Billing-cycle minute allowance" aria-valuemin={0} aria-valuemax={activePlan.minutes} aria-valuenow={Math.min(usedMinutes, activePlan.minutes)} aria-valuetext={`${usedMinutes.toLocaleString()} of ${activePlan.minutes.toLocaleString()} minutes used`}>
             <span style={{ width: `${usagePercent}%` }} />
           </div>
           <div className="ruh-allowance-numbers">
-            <strong>4,820 minutes</strong>
+            <strong>{usedMinutes.toLocaleString()} minutes</strong>
             <span>of {activePlan.minutes.toLocaleString()}</span>
           </div>
           <div className="ruh-forecast-card">
             <span aria-hidden="true">↗</span>
             <div>
-              <strong>No overage expected</strong>
-              <p>Projected usage is 7,340 minutes by September 28.</p>
+              <strong>{projectedOverage ? `${projectedOverage.toLocaleString()} overage minutes forecast` : "No overage expected"}</strong>
+              <p>Projected usage is {projectedMinutes.toLocaleString()} minutes by September 28.</p>
             </div>
           </div>
           <label className="ruh-toggle-row">

@@ -12,6 +12,11 @@
 
 # testing
 /coverage
+/tmp/
+
+# generated presentation working files
+/artifacts/ruhana-pitch/.build/
+/artifacts/ruhana-pitch/node_modules/
 
 # next.js
 /.next/

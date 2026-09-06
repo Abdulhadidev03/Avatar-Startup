@@ -10,7 +10,7 @@ type SignInFormProps = {
 };
 
 type Stage = "email" | "code";
-type PendingAction = "email" | "code" | "google" | null;
+type PendingAction = "email" | "code" | "resend" | "google" | null;
 type MessageKind = "error" | "status";
 
 function friendlyAuthError(error: unknown, fallback: string) {
@@ -67,6 +67,36 @@ export function SignInForm({ configured, initialMessage, nextPath }: SignInFormP
     return /^\S+@\S+\.\S+$/.test(email.trim());
   }
 
+  async function sendCode(targetEmail: string, action: "email" | "resend") {
+    setPending(action);
+    setMessage(null);
+
+    try {
+      const supabase = createBrowserSupabaseClient();
+      const { error } = await supabase.auth.signInWithOtp({
+        email: targetEmail,
+        options: {
+          // Supabase creates a first-time account by default. Make that choice
+          // explicit so passwordless sign-in remains the only onboarding path.
+          shouldCreateUser: true,
+          emailRedirectTo: callbackUrl(nextPath),
+        },
+      });
+
+      if (error) {
+        showMessage(friendlyAuthError(error, "We could not send a code. Please try again."), "error");
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      showMessage(friendlyAuthError(error, "We could not send a code. Please try again."), "error");
+      return false;
+    } finally {
+      setPending(null);
+    }
+  }
+
   async function requestCode(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -82,34 +112,31 @@ export function SignInForm({ configured, initialMessage, nextPath }: SignInFormP
       return;
     }
 
-    setPending("email");
-    setMessage(null);
-
-    try {
-      const supabase = createBrowserSupabaseClient();
-      const { error } = await supabase.auth.signInWithOtp({
-        email: normalizedEmail,
-        options: {
-          // Supabase creates a first-time account by default. Make that choice
-          // explicit so passwordless sign-in remains the only onboarding path.
-          shouldCreateUser: true,
-          emailRedirectTo: callbackUrl(nextPath),
-        },
-      });
-
-      if (error) {
-        showMessage(friendlyAuthError(error, "We could not send a code. Please try again."), "error");
-        return;
-      }
-
-      setEmail(normalizedEmail);
-      setStage("code");
-      showMessage(`A 6-digit code is on its way to ${normalizedEmail}.`, "status");
-    } catch (error) {
-      showMessage(friendlyAuthError(error, "We could not send a code. Please try again."), "error");
-    } finally {
-      setPending(null);
+    if (!(await sendCode(normalizedEmail, "email"))) {
+      return;
     }
+
+    setEmail(normalizedEmail);
+    setStage("code");
+    showMessage(`A 6-digit code is on its way to ${normalizedEmail}.`, "status");
+  }
+
+  // Resend in place. The previous handler dropped the user back to the email
+  // step, forcing them to retype an address they had already entered.
+  async function resendCode() {
+    if (!configured) {
+      showMessage("Sign-in is not configured for this deployment yet.", "error");
+      return;
+    }
+
+    setCode("");
+
+    if (!(await sendCode(email, "resend"))) {
+      return;
+    }
+
+    showMessage(`A new 6-digit code is on its way to ${email}.`, "status");
+    codeInputRef.current?.focus();
   }
 
   async function verifyCode(event: React.FormEvent<HTMLFormElement>) {
@@ -273,8 +300,14 @@ export function SignInForm({ configured, initialMessage, nextPath }: SignInFormP
           >
             {pending === "code" ? "Confirming…" : "Sign in"}
           </button>
-          <button className="ruh-auth-text-button" type="button" disabled={isBusy} onClick={returnToEmail}>
-            Didn’t receive a code? Send another
+          <button
+            className="ruh-auth-text-button"
+            type="button"
+            disabled={isBusy}
+            aria-busy={pending === "resend"}
+            onClick={resendCode}
+          >
+            {pending === "resend" ? "Sending a new code…" : "Didn’t receive a code? Send another"}
           </button>
         </form>
       )}

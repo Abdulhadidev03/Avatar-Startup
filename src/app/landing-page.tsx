@@ -510,6 +510,7 @@ export default function LandingPage({ authenticated }: LandingPageProps) {
           <a href="#how-it-works" onClick={() => setMenuOpen(false)}>How it works</a>
           <a href="#use-cases" onClick={() => setMenuOpen(false)}>Use cases</a>
           <a href="#impact" onClick={() => setMenuOpen(false)}>Impact</a>
+          <Link href="/pricing" onClick={() => setMenuOpen(false)}>Pricing</Link>
           <a href="#developers" onClick={() => setMenuOpen(false)}>Developers</a>
         </nav>
         <div className="lp-nav-actions">
@@ -708,7 +709,7 @@ export default function LandingPage({ authenticated }: LandingPageProps) {
       <footer className="lp-footer">
         <div className="footer-top"><RuhanaLogo href="/"/><p>Context-aware video agents for the moments that move a business forward.</p></div>
         <div className="footer-links">
-          <div><span>Product</span><a href="#how-it-works">How it works</a><a href="#use-cases">Use cases</a><a href="#impact">Analytics</a></div>
+          <div><span>Product</span><a href="#how-it-works">How it works</a><a href="#use-cases">Use cases</a><a href="#impact">Analytics</a><Link href="/pricing">Pricing</Link></div>
           <div><span>Build</span><Link href={primaryHref}>Create an agent</Link><a href="#developers">Developers</a><Link href="/sign-in">Sign in</Link></div>
           <div><span>Principles</span><p>Context aware</p><p>Visitor controlled</p><p>Measurable outcomes</p></div>
           <div><span>Company</span><Link href="/privacy">Privacy Policy</Link><Link href="/terms">Terms of Service</Link><a href="mailto:support@ruhanaai.com">Contact</a></div>
