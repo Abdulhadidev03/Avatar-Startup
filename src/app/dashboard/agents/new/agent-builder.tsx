@@ -309,16 +309,24 @@ export function AgentBuilder({ initialAvatarId, initialSource, resumeAgentId }: 
       // Upload custom photo to Supabase Storage + create Anam avatar
       let avatarImageUrl: string | null = null;
       let customAnamAvatarId: string | null = null;
-      if (avatarSource === "custom" && customFileRef.current) {
+      if (avatarSource === "custom") {
+        if (!customFileRef.current) {
+          setLaunchState("draft");
+          setSaveLabel("Re-upload your custom photo, then launch again.");
+          return;
+        }
         const form = new FormData();
         form.append("file", customFileRef.current);
         form.append("displayName", displayName || "Custom Avatar");
         const uploadRes = await fetch("/api/agents/upload-avatar", { method: "POST", body: form });
-        if (uploadRes.ok) {
-          const uploadData = await uploadRes.json();
-          avatarImageUrl = uploadData.url ?? null;
-          customAnamAvatarId = uploadData.anamAvatarId ?? null;
+        const uploadData = await uploadRes.json().catch(() => ({}));
+        if (!uploadRes.ok || !uploadData.anamAvatarId) {
+          setLaunchState("draft");
+          setSaveLabel(uploadData.error || "Custom avatar creation failed. Try another photo.");
+          return;
         }
+        avatarImageUrl = uploadData.url ?? null;
+        customAnamAvatarId = uploadData.anamAvatarId;
       }
 
       const selectedAvatarData = avatars.find((a) => a.id === avatarId);
@@ -352,9 +360,15 @@ export function AgentBuilder({ initialAvatarId, initialSource, resumeAgentId }: 
         setLaunchedAgentId(saved.id);
         // Remove the draft from localStorage now that it's persisted in DB
         removeStoredAgent(storageId);
+      } else {
+        setLaunchState("draft");
+        setSaveLabel("Could not save the agent. Try again.");
+        return;
       }
     } catch {
-      // Save locally as fallback
+      setLaunchState("draft");
+      setSaveLabel("Launch failed. Check your connection and try again.");
+      return;
     }
     setLaunchState("live");
   }

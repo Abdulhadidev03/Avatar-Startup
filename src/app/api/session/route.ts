@@ -11,6 +11,7 @@ type AgentSessionConfig = {
   avatarId: string | null;
   voiceId: string | null;
   profileId: string | null;
+  imageUrl: string | null;
 };
 
 const requestWindows = new Map<string, { count: number; resetAt: number }>();
@@ -54,17 +55,28 @@ async function getAvailableAvatars(apiKey: string) {
   return avatars;
 }
 
-function resolveAvatarId(avatars: AvatarRecord[], preferred: string | null) {
-  const ids = new Set(avatars.flatMap((avatar) => avatar.id ? [avatar.id] : []));
-  if (preferred && ids.has(preferred)) return preferred;
+function resolveAvatarId(
+  avatars: AvatarRecord[],
+  preferred: string | null,
+  preferCustom: boolean,
+) {
+  // Agent DB is the source of truth — don't drop a custom ID just because the
+  // avatar list cache is stale after a fresh upload.
+  if (preferred) return preferred;
 
-  const environmentAvatar = process.env.ANAM_AVATAR_ID;
-  if (environmentAvatar && ids.has(environmentAvatar)) return environmentAvatar;
+  const orgCustom =
+    avatars.find((avatar) => avatar.id && avatar.createdByOrganizationId)?.id ?? null;
+  if (preferCustom && orgCustom) return orgCustom;
 
-  return avatars.find((avatar) => avatar.id && avatar.createdByOrganizationId)?.id
+  const environmentAvatar = process.env.ANAM_AVATAR_ID ?? null;
+  if (environmentAvatar) return environmentAvatar;
+
+  return (
+    avatars.find((avatar) => avatar.id && !avatar.createdByOrganizationId)?.id
+    ?? orgCustom
     ?? avatars.find((avatar) => avatar.id)?.id
-    ?? environmentAvatar
-    ?? null;
+    ?? null
+  );
 }
 
 export async function POST(request: NextRequest) {
@@ -100,7 +112,7 @@ export async function POST(request: NextRequest) {
     if (agentId) {
       const { data: agent, error } = await supabaseAdmin
         .from("agents")
-        .select("name, anam_avatar_id, anam_voice_id, profile_id")
+        .select("name, anam_avatar_id, anam_voice_id, profile_id, avatar_image_url")
         .eq("id", agentId)
         .maybeSingle();
 
@@ -113,11 +125,16 @@ export async function POST(request: NextRequest) {
         avatarId: isUuid(agent.anam_avatar_id) ? agent.anam_avatar_id : null,
         voiceId: isUuid(agent.anam_voice_id) ? agent.anam_voice_id : null,
         profileId: isUuid(agent.profile_id) ? agent.profile_id : null,
+        imageUrl: typeof agent.avatar_image_url === "string" ? agent.avatar_image_url : null,
       };
     }
 
     const avatars = await getAvailableAvatars(apiKey);
-    const avatarId = resolveAvatarId(avatars, agentConfig?.avatarId ?? null);
+    const avatarId = resolveAvatarId(
+      avatars,
+      agentConfig?.avatarId ?? null,
+      Boolean(agentConfig?.imageUrl),
+    );
     const voiceId = agentConfig?.voiceId ?? fallbackVoiceId;
     if (!avatarId || !voiceId) {
       return NextResponse.json({ error: "This agent is missing its voice or avatar." }, { status: 503 });

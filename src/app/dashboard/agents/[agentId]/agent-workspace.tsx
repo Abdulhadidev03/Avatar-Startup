@@ -102,11 +102,12 @@ function ConfigureTab({ agent, onUpdated }: { agent: FrontendAgent; onUpdated: (
         form.append("file", fileRef.current);
         form.append("displayName", name || "Custom Avatar");
         const uploadRes = await fetch("/api/agents/upload-avatar", { method: "POST", body: form });
-        if (uploadRes.ok) {
-          const data = await uploadRes.json();
-          avatarImageUrl = data.url ?? avatarImageUrl;
-          anamAvatarId = data.anamAvatarId ?? null;
+        const data = await uploadRes.json().catch(() => ({}));
+        if (!uploadRes.ok || !data.anamAvatarId) {
+          throw new Error(data.error || "Custom avatar creation failed");
         }
+        avatarImageUrl = data.url ?? avatarImageUrl;
+        anamAvatarId = data.anamAvatarId;
       }
 
       const updates: Record<string, unknown> = { name, role, greeting, tone, responseLength, language, instructions, avatarId, avatarImageUrl };
