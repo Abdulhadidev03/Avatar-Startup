@@ -33,7 +33,7 @@ export function LegalDocument({
       </a>
 
       <header className="legal-header">
-        <RuhanaLogo />
+        <RuhanaLogo href="/" />
         <nav aria-label="Legal documents">
           <Link aria-current={current === "privacy" ? "page" : undefined} href="/privacy">
             Privacy
@@ -77,7 +77,7 @@ export function LegalDocument({
 
       <footer className="legal-footer">
         <div>
-          <RuhanaLogo />
+          <RuhanaLogo href="/" />
           <p>Context-aware video agents for useful conversations.</p>
         </div>
         <nav aria-label="Footer">

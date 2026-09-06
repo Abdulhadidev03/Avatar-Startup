@@ -26,7 +26,8 @@ export const metadata: Metadata = {
     type: "website",
   },
   icons: {
-    icon: "/icon.svg",
+    icon: [{ url: "/icon.svg?v=ruhana-mark-1", type: "image/svg+xml" }],
+    shortcut: "/icon.svg?v=ruhana-mark-1",
   },
 };
 

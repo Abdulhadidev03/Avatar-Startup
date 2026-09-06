@@ -501,7 +501,7 @@ export default function LandingPage({ authenticated }: LandingPageProps) {
     <div className="landing-root">
       <a className="skip-link" href="#main-content">Skip to content</a>
       <header className="lp-nav" data-raised={navRaised}>
-        <RuhanaLogo />
+        <RuhanaLogo href="/" />
         <button className="lp-menu-button" onClick={() => setMenuOpen((value) => !value)} type="button"
           aria-controls="landing-navigation" aria-expanded={menuOpen} aria-label="Toggle navigation">
           <span/><span/>
@@ -602,7 +602,7 @@ export default function LandingPage({ authenticated }: LandingPageProps) {
           <div className="builder-layout">
             <div className="builder-preview" data-step={activeStep}>
               <div className="builder-window">
-                <div className="builder-window-head"><RuhanaLogo compact/><span>New agent</span><b>Step {activeStep + 1} of 4</b></div>
+                <div className="builder-window-head"><RuhanaLogo href="/" compact/><span>New agent</span><b>Step {activeStep + 1} of 4</b></div>
                 <div className="builder-progress"><i/><i/><i/><i/></div>
                 <div className="builder-screen builder-screen-avatar">
                   <span className="lp-kicker">Choose an avatar</span>
@@ -650,7 +650,7 @@ export default function LandingPage({ authenticated }: LandingPageProps) {
             <p>Not a vanity dashboard. Ruhana connects conversations to outcomes so you can see where it helped—and where the experience still needs work.</p>
           </div>
           <div className="impact-dashboard" data-reveal>
-            <div className="impact-topbar"><div><RuhanaLogo compact/><span>Impact overview</span></div><button type="button">Last 30 days <Icon name="chevron" size={14}/></button></div>
+            <div className="impact-topbar"><div><RuhanaLogo href="/" compact/><span>Impact overview</span></div><button type="button">Last 30 days <Icon name="chevron" size={14}/></button></div>
             <div className="impact-metrics">
               <article><span>Useful outcomes</span><strong>68%</strong><small><b>+12%</b> this month</small></article>
               <article><span>Qualified visitors</span><strong>184</strong><small>From 612 conversations</small></article>
@@ -706,7 +706,7 @@ export default function LandingPage({ authenticated }: LandingPageProps) {
       </main>
 
       <footer className="lp-footer">
-        <div className="footer-top"><RuhanaLogo/><p>Context-aware video agents for the moments that move a business forward.</p></div>
+        <div className="footer-top"><RuhanaLogo href="/"/><p>Context-aware video agents for the moments that move a business forward.</p></div>
         <div className="footer-links">
           <div><span>Product</span><a href="#how-it-works">How it works</a><a href="#use-cases">Use cases</a><a href="#impact">Analytics</a></div>
           <div><span>Build</span><Link href={primaryHref}>Create an agent</Link><a href="#developers">Developers</a><Link href="/sign-in">Sign in</Link></div>
