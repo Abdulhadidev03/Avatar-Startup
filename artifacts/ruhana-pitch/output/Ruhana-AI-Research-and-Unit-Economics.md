@@ -77,24 +77,29 @@ The Enterprise price is a floor, not a promise for on-premise or unusually high-
 
 ## Illustrative management base case
 
-The financial slide is a scenario for planning and fundraising discussion, not current operating performance.
+The refined financial slide uses a single one-year planning view. It is a management scenario for fundraising discussion, not current operating performance.
 
-| Metric | Q4 ’26 | Q1 ’27 | Q2 ’27 | Q3 ’27 | Q4 ’27 | Q1 ’28 | Q2 ’28 | Q3 ’28 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Ending paid customers | 12 | 35 | 75 | 130 | 220 | 330 | 470 | 650 |
-| Quarter revenue | $2k | $7k | $18k | $36k | $67k | $113k | $175k | $260k |
-| Gross margin | 50% | 52% | 54% | 55% | 56% | 57% | 58% | 59% |
-| Gross profit | $1k | $4k | $10k | $20k | $37k | $64k | $102k | $154k |
-| Operating spend | $18k | $24k | $32k | $45k | $60k | $75k | $95k | $120k |
-| Operating result | ($17k) | ($20k) | ($22k) | ($25k) | ($23k) | ($11k) | $7k | $34k |
+| Metric | Q1 | Q2 | Q3 | Q4 | Year 1 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| New customers | 12 | 23 | 40 | 55 | 130 |
+| Total active | 12 | 35 | 75 | 130 | 130 |
+| Subscription revenue | $2.0k | $7.0k | $18.0k | $36.0k | $63.0k |
+| Setup and services | $1.0k | $2.0k | $3.0k | $4.0k | $10.0k |
+| Total revenue | $3.0k | $9.0k | $21.0k | $40.0k | $73.0k |
+| Variable cost | $1.5k | $4.0k | $9.4k | $18.0k | $32.9k |
+| Operating spend | $18.0k | $24.0k | $32.0k | $45.0k | $119.0k |
+| Operating result | ($16.5k) | ($19.0k) | ($20.4k) | ($23.0k) | ($78.9k) |
+| Gross margin | 50% | 56% | 55% | 55% | 55% |
 
-The scenario assumes blended monthly ARPA rises from roughly $96 to $155 as the plan mix moves upward. Quarter revenue uses average customers within each quarter. Operating breakeven occurs in Q2 2028 in this scenario. Exit ARR is based on Q3 2028 ending MRR: `650 × $155 × 12 = $1.209M`, rounded to **$1.21M**.
+The table is intentionally compact and editable in PowerPoint. The year-one figures use the same paid-only pricing and $0.13-per-minute planning cost described above. They should be replaced with actual cohort, usage, and operating data as the first deployments mature.
 
 ## Visual and claim guardrails
 
-- Faces appear only on the cover and Solution slides. The remaining deck uses product UI, diagrams, editorial type, icons, and restrained non-facial artwork.
+- The 14-slide information architecture, text density, and object placement follow the supplied Cervana reference, while all wording, figures, artwork, and branding are Ruhana-specific.
+- Faces appear only on the cover and Solution slides. The remaining deck uses editable diagrams, editorial type, and restrained faceless artwork.
 - The visuals are original Ruhana assets or Ruhana product captures; competitor media is not reused.
+- Every slide carries the Ruhana R mark at bottom-right.
+- The visual system is white, black, and gray. Muted blue and orange appear only as small navigational cues.
 - The deck does not claim that video agents produce a universal percentage improvement over chatbots because the cited evidence does not support one defensible cross-industry number.
-- The analytics dashboard screenshot contains illustrative data and is labeled accordingly.
 - Private-cloud and on-premise support is presented as an enterprise pathway, not as a currently certified deployment claim.
 - Contributor labels describe present areas of work. Confirm legal officer titles before distributing the deck externally.
