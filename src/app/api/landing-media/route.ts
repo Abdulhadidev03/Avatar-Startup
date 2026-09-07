@@ -1,64 +1,36 @@
 import { NextResponse } from "next/server";
-
-type AnamAvatar = {
-  id?: string;
-  displayName?: string;
-  imageUrl?: string | null;
-  videoUrl?: string | null;
-  createdByOrganizationId?: string | null;
-};
+import { getLiveAgent, resolveLandingAvatar } from "@/lib/landing-demo";
 
 export const dynamic = "force-dynamic";
 
+const EMPTY = { id: null, name: null, imageUrl: null, videoUrl: null };
+
 export async function GET() {
   const apiKey = process.env.ANAM_API_KEY;
-
-  if (!apiKey) {
-    return NextResponse.json({ imageUrl: null, videoUrl: null }, { status: 200 });
-  }
+  if (!apiKey) return NextResponse.json(EMPTY, { status: 200 });
 
   try {
-    const response = await fetch("https://api.anam.ai/v1/avatars", {
-      headers: { Authorization: `Bearer ${apiKey}` },
-      cache: "no-store",
-    });
+    const agent = await getLiveAgent();
+    // Same resolver the session route uses, so the still preview and the live
+    // stream always show the same face.
+    const avatar = await resolveLandingAvatar(apiKey, agent?.anam_avatar_id);
 
-    if (!response.ok) throw new Error("Avatar media is unavailable");
-
-    const payload = await response.json();
-    const avatars: AnamAvatar[] = Array.isArray(payload)
-      ? payload
-      : Array.isArray(payload?.data)
-        ? payload.data
-        : Array.isArray(payload?.avatars)
-          ? payload.avatars
-          : [];
-    const owned = avatars.find((avatar) => Boolean(avatar.createdByOrganizationId));
-
-    if (!owned?.id) {
-      return NextResponse.json({ imageUrl: null, videoUrl: null }, { status: 200 });
-    }
-
-    const detailResponse = await fetch(`https://api.anam.ai/v1/avatars/${owned.id}`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-      cache: "no-store",
-    });
-    const detail: AnamAvatar = detailResponse.ok ? await detailResponse.json() : owned;
+    if (!avatar?.id) return NextResponse.json(EMPTY, { status: 200 });
 
     return NextResponse.json(
       {
-        id: detail.id ?? owned.id,
-        name: detail.displayName ?? owned.displayName ?? "Ruhana guide",
-        imageUrl: detail.imageUrl ?? owned.imageUrl ?? null,
-        videoUrl: detail.videoUrl ?? owned.videoUrl ?? null,
+        id: avatar.id,
+        name: agent?.name ?? avatar.displayName ?? "Ruhana guide",
+        imageUrl: avatar.imageUrl ?? null,
+        videoUrl: avatar.videoUrl ?? null,
       },
       {
-        headers: {
-          "Cache-Control": "public, max-age=300, stale-while-revalidate=900",
-        },
+        // Short window: a stale preview here is exactly what made the preview
+        // and the live avatar disagree after an avatar or API-key change.
+        headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=300" },
       },
     );
   } catch {
-    return NextResponse.json({ imageUrl: null, videoUrl: null }, { status: 200 });
+    return NextResponse.json(EMPTY, { status: 200 });
   }
 }

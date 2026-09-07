@@ -12,7 +12,7 @@ type LandingPageProps = {
 
 type DemoStatus = "idle" | "connecting" | "live" | "error" | "ended";
 type DemoMessage = { role: "user" | "assistant"; text: string };
-type DemoMedia = { imageUrl?: string | null; videoUrl?: string | null };
+type DemoMedia = { id?: string | null; name?: string | null; imageUrl?: string | null; videoUrl?: string | null };
 
 type IconName =
   | "arrow"
@@ -155,6 +155,199 @@ function useDockedRect(anchorRef: RefObject<HTMLDivElement | null>, expanded: bo
   return geometry;
 }
 
+type LiveContext = {
+  url?: string;
+  path?: string;
+  scrollDepth?: number;
+  visibleSection?: string;
+  lastClick?: string;
+};
+
+type JourneyEvent = {
+  type: string;
+  path?: string;
+  title?: string;
+  tag?: string;
+  text?: string | null;
+  href?: string | null;
+  seconds?: number;
+  depth?: number;
+  ts?: number;
+};
+
+const JOURNEY_KEY = "ruhana_journey_v1";
+const JOURNEY_LIMIT = 20;
+
+function readScrollDepth() {
+  try {
+    const scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
+    const viewportHeight = window.innerHeight || 1;
+    const documentHeight = Math.max(
+      document.documentElement.scrollHeight,
+      document.body ? document.body.scrollHeight : 1,
+    );
+    return Math.min(100, Math.max(0, Math.round(((scrollTop + viewportHeight) / documentHeight) * 100)));
+  } catch {
+    return 0;
+  }
+}
+
+function readVisibleSection(): string | null {
+  try {
+    const candidates = Array.from(
+      document.querySelectorAll<HTMLElement>("h1,h2,h3,[data-section],section[aria-label]"),
+    );
+    const viewportHeight = window.innerHeight || 800;
+    const focusLine = viewportHeight * 0.35;
+
+    let onScreen: HTMLElement | null = null;
+    let onScreenDistance = Number.POSITIVE_INFINITY;
+    let lastPassed: HTMLElement | null = null;
+    let lastPassedTop = Number.NEGATIVE_INFINITY;
+
+    for (const candidate of candidates) {
+      const rect = candidate.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) continue;
+
+      // A heading actually on screen wins — it is what the visitor can read.
+      if (rect.top >= -40 && rect.top <= viewportHeight * 0.75) {
+        const distance = Math.abs(rect.top - focusLine);
+        if (distance < onScreenDistance) {
+          onScreenDistance = distance;
+          onScreen = candidate;
+        }
+      }
+
+      // Otherwise fall back to the last heading scrolled past: sections on this
+      // page are far taller than the viewport, so for most scroll positions no
+      // heading is on screen at all and the visitor is *inside* a section.
+      if (rect.top < focusLine && rect.top > lastPassedTop) {
+        lastPassedTop = rect.top;
+        lastPassed = candidate;
+      }
+    }
+
+    const chosen = onScreen ?? lastPassed;
+    if (!chosen) return null;
+    const label = (chosen.innerText || chosen.getAttribute("aria-label") || "").trim().replace(/\s+/g, " ").slice(0, 80);
+    return label || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Mirrors the visitor tracking the embed script runs on customer sites, so the
+ * landing demo reaches /api/brain with the same live context a real deployment
+ * sends. Without this the agent cannot tell what the visitor is looking at.
+ */
+function useVisitorContext() {
+  const recentEventsRef = useRef<JourneyEvent[]>([]);
+  const lastClickRef = useRef<string | null>(null);
+
+  // Computed on demand rather than on every scroll tick: reading the visible
+  // section walks the DOM, and it is only ever needed when the agent answers.
+  const getLiveContext = useCallback((): LiveContext => ({
+    url: window.location.href.slice(0, 2048),
+    path: window.location.pathname.slice(0, 512),
+    scrollDepth: readScrollDepth(),
+    visibleSection: readVisibleSection() ?? undefined,
+    lastClick: lastClickRef.current ?? undefined,
+  }), []);
+
+  useEffect(() => {
+    const scrollMarks: Record<number, boolean> = {};
+    const startedAt = Date.now();
+
+    const remember = (event: JourneyEvent) => {
+      recentEventsRef.current = [...recentEventsRef.current, event].slice(-JOURNEY_LIMIT);
+      try {
+        window.sessionStorage.setItem(JOURNEY_KEY, JSON.stringify(recentEventsRef.current));
+      } catch {
+        // Blocked storage must never interrupt the page.
+      }
+    };
+
+    try {
+      const stored: unknown = JSON.parse(window.sessionStorage.getItem(JOURNEY_KEY) ?? "[]");
+      if (Array.isArray(stored)) recentEventsRef.current = stored.slice(-JOURNEY_LIMIT);
+    } catch {
+      recentEventsRef.current = [];
+    }
+
+    remember({ type: "page_view", path: window.location.pathname, title: document.title, ts: Date.now() });
+
+    const onScroll = () => {
+      const depth = readScrollDepth();
+      for (const milestone of [25, 50, 75, 100]) {
+        if (depth >= milestone && !scrollMarks[milestone]) {
+          scrollMarks[milestone] = true;
+          remember({ type: "scroll", path: window.location.pathname, depth: milestone, ts: Date.now() });
+        }
+      }
+    };
+
+    const onClick = (event: MouseEvent) => {
+      try {
+        const target = event.target as HTMLElement | null;
+        const control = target?.closest?.(
+          "a,button,[role='button'],input[type='submit'],input[type='button']",
+        ) as HTMLElement | null;
+        // Skip the demo panel's own controls — those are not visitor intent.
+        if (!control || control.closest(".demo-shell")) return;
+
+        const tag = control.tagName.toLowerCase();
+        const raw = (
+          control.innerText ||
+          (control as HTMLInputElement).value ||
+          control.getAttribute("aria-label") ||
+          ""
+        ).trim().replace(/\s+/g, " ");
+        const text = raw.slice(0, 50);
+
+        const href = control.getAttribute("href");
+        let safeHref: string | null = null;
+        if (href) {
+          try {
+            const hrefUrl = new URL(href, window.location.href);
+            safeHref = hrefUrl.origin === window.location.origin
+              ? hrefUrl.pathname.slice(0, 512)
+              : hrefUrl.hostname.slice(0, 120);
+          } catch {
+            safeHref = null;
+          }
+        }
+
+        lastClickRef.current = `${text ? `"${text}" ` : ""}(${tag}${safeHref ? ` to ${safeHref}` : ""})`;
+        remember({ type: "click", path: window.location.pathname, tag, text: text || null, href: safeHref, ts: Date.now() });
+      } catch {
+        // Tracking must never interrupt the page.
+      }
+    };
+
+    const onHide = () => {
+      remember({
+        type: "page_time",
+        path: window.location.pathname,
+        seconds: Math.round((Date.now() - startedAt) / 1000),
+        ts: Date.now(),
+      });
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    document.addEventListener("click", onClick, true);
+    window.addEventListener("pagehide", onHide);
+
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      document.removeEventListener("click", onClick, true);
+      window.removeEventListener("pagehide", onHide);
+    };
+  }, []);
+
+  return { getLiveContext, recentEventsRef };
+}
+
 function LiveDemo({ anchorRef }: { anchorRef: RefObject<HTMLDivElement | null> }) {
   const [expanded, setExpanded] = useState(false);
   const geometry = useDockedRect(anchorRef, expanded);
@@ -173,6 +366,7 @@ function LiveDemo({ anchorRef }: { anchorRef: RefObject<HTMLDivElement | null> }
   const sessionPromiseRef = useRef<Promise<{ token: string; id: string }> | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const historyIndexRef = useRef(-1);
+  const { getLiveContext, recentEventsRef } = useVisitorContext();
 
   const docked = geometry.shapeProgress > 0.72;
   const displayMode = expanded && docked ? "expanded" : docked ? "docked" : "hero";
@@ -224,12 +418,17 @@ function LiveDemo({ anchorRef }: { anchorRef: RefObject<HTMLDivElement | null> }
     const response = await fetch("/api/brain", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: id, userText: text }),
+      body: JSON.stringify({
+        sessionId: id,
+        userText: text,
+        liveContext: getLiveContext(),
+        recentEvents: recentEventsRef.current.slice(-15),
+      }),
     });
     const body = await response.json();
     if (!response.ok) throw new Error(body.error ?? "Ruhana could not answer just now.");
     return String(body.replyText ?? "").trim();
-  }, []);
+  }, [getLiveContext, recentEventsRef]);
 
   const connectVoice = useCallback(async () => {
     if (anamRef.current?.isStreaming()) return anamRef.current;
@@ -378,7 +577,7 @@ function LiveDemo({ anchorRef }: { anchorRef: RefObject<HTMLDivElement | null> }
           <div className="demo-video-wash" />
           <div className="demo-live-label"><span /> {status === "live" ? "Live" : "Preview"}</div>
           <div className="demo-avatar-caption">
-            <strong>Maya</strong>
+            <strong>{media.name ?? "Ruhana guide"}</strong>
             <span>Ruhana product guide</span>
           </div>
           <button className="demo-sound" onClick={() => setSpeakerMuted((value) => !value)}

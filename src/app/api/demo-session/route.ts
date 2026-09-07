@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-
-type AnamAvatar = {
-  id?: string;
-  displayName?: string;
-  createdByOrganizationId?: string | null;
-};
+import { getLiveAgent, resolveLandingAvatar } from "@/lib/landing-demo";
 
 const requests = new Map<string, { count: number; resetAt: number }>();
 const WINDOW_MS = 10 * 60 * 1000;
@@ -23,23 +18,6 @@ function allowed(ip: string) {
   return true;
 }
 
-async function getOwnedAvatar(apiKey: string) {
-  const response = await fetch("https://api.anam.ai/v1/avatars", {
-    headers: { Authorization: `Bearer ${apiKey}` },
-    cache: "no-store",
-  });
-  if (!response.ok) return null;
-  const payload = await response.json();
-  const avatars: AnamAvatar[] = Array.isArray(payload)
-    ? payload
-    : Array.isArray(payload?.data)
-      ? payload.data
-      : Array.isArray(payload?.avatars)
-        ? payload.avatars
-        : [];
-  return avatars.find((avatar) => Boolean(avatar.createdByOrganizationId)) ?? null;
-}
-
 export async function POST(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
   if (!allowed(ip)) {
@@ -50,23 +28,21 @@ export async function POST(request: NextRequest) {
   }
 
   const apiKey = process.env.ANAM_API_KEY;
-  const voiceId = process.env.ANAM_VOICE_ID;
-  if (!apiKey || !voiceId) {
+  if (!apiKey) {
     return NextResponse.json({ error: "The live preview is not configured yet." }, { status: 503 });
   }
 
   try {
-    const { data: agent } = await supabaseAdmin
-      .from("agents")
-      .select("id, name, profile_id")
-      .eq("status", "Live")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const agent = await getLiveAgent();
 
-    const ownedAvatar = await getOwnedAvatar(apiKey);
-    const avatarId = ownedAvatar?.id ?? process.env.ANAM_AVATAR_ID;
+    // Shared with /api/landing-media so the preview still and the live stream
+    // resolve to the same avatar.
+    const avatar = await resolveLandingAvatar(apiKey, agent?.anam_avatar_id);
+    const avatarId = avatar?.id ?? process.env.ANAM_AVATAR_ID;
     if (!avatarId) throw new Error("No avatar is configured");
+
+    const voiceId = agent?.anam_voice_id ?? process.env.ANAM_VOICE_ID;
+    if (!voiceId) throw new Error("No voice is configured");
 
     const { data: session, error: sessionError } = await supabaseAdmin
       .from("sessions")
@@ -108,7 +84,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       sessionToken,
       sessionId: session.id,
-      agentName: agent?.name ?? ownedAvatar?.displayName ?? "Ruhana guide",
+      agentName: agent?.name ?? avatar?.displayName ?? "Ruhana guide",
+      avatarId,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "The live preview could not start";
