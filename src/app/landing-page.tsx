@@ -4,6 +4,7 @@ import { FormEvent, RefObject, useCallback, useEffect, useRef, useState } from "
 import Link from "next/link";
 import type { AnamClient } from "@anam-ai/js-sdk";
 import { RuhanaLogo } from "@/components/ruhana-logo";
+import { avatarById } from "./dashboard/mock-data";
 
 type LandingPageProps = {
   authenticated: boolean;
@@ -463,10 +464,16 @@ const steps = [
   { number: "04", title: "Copy one line", body: "Preview it, publish it, and follow every useful result from the dashboard." },
 ];
 
+const builderAvatars = [
+  { name: "Sarah", kind: "Real", imageUrl: avatarById("sarah").imageUrl },
+  { name: "Sarah", kind: "Animated", imageUrl: "/avatars/sarah-animated-v1.webp" },
+  { name: "Rumi", kind: "Animal", imageUrl: "/avatars/rumi-red-panda-v1.webp" },
+];
+
 const roles = [
-  { name: "Aria", role: "Sales guide", index: 1, line: "Turns comparison into clarity." },
-  { name: "Nia", role: "Customer support", index: 2, line: "Resolves the question in context." },
-  { name: "Theo", role: "Product specialist", index: 6, line: "Shows the next useful step." },
+  { name: avatarById("sarah").name, role: avatarById("sarah").title, imageUrl: avatarById("sarah").imageUrl, line: "Turns comparison into clarity." },
+  { name: avatarById("anne").name, role: avatarById("anne").title, imageUrl: avatarById("anne").imageUrl, line: "Resolves the question in context." },
+  { name: avatarById("gabriel").name, role: avatarById("gabriel").title, imageUrl: avatarById("gabriel").imageUrl, line: "Shows the next useful step." },
 ];
 
 export default function LandingPage({ authenticated }: LandingPageProps) {
@@ -474,6 +481,7 @@ export default function LandingPage({ authenticated }: LandingPageProps) {
   const [navRaised, setNavRaised] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
+  const activeBuilderAvatarIndex = activeStep < 3 ? activeStep : 0;
   useReveal();
 
   useEffect(() => {
@@ -485,13 +493,36 @@ export default function LandingPage({ authenticated }: LandingPageProps) {
 
   useEffect(() => {
     const stepNodes = Array.from(document.querySelectorAll<HTMLElement>("[data-builder-step]"));
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) setActiveStep(Number((entry.target as HTMLElement).dataset.builderStep));
+    let animationFrame = 0;
+
+    const updateActiveStep = () => {
+      cancelAnimationFrame(animationFrame);
+      animationFrame = requestAnimationFrame(() => {
+        const focusLine = window.innerHeight * 0.48;
+        let closestStep = 0;
+        let closestDistance = Number.POSITIVE_INFINITY;
+
+        stepNodes.forEach((node) => {
+          const bounds = node.getBoundingClientRect();
+          const distance = Math.abs(bounds.top + bounds.height / 2 - focusLine);
+          if (distance < closestDistance) {
+            closestDistance = distance;
+            closestStep = Number(node.dataset.builderStep);
+          }
+        });
+
+        setActiveStep(closestStep);
       });
-    }, { threshold: 0.55 });
-    stepNodes.forEach((node) => observer.observe(node));
-    return () => observer.disconnect();
+    };
+
+    updateActiveStep();
+    window.addEventListener("scroll", updateActiveStep, { passive: true });
+    window.addEventListener("resize", updateActiveStep);
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      window.removeEventListener("scroll", updateActiveStep);
+      window.removeEventListener("resize", updateActiveStep);
+    };
   }, []);
 
   const primaryHref = authenticated ? "/dashboard/agents" : "/sign-in";
@@ -607,11 +638,25 @@ export default function LandingPage({ authenticated }: LandingPageProps) {
                 <div className="builder-progress"><i/><i/><i/><i/></div>
                 <div className="builder-screen builder-screen-avatar">
                   <span className="lp-kicker">Choose an avatar</span>
-                  <h3>A face your visitors will remember.</h3>
-                  <div className="builder-avatars">
-                    {[1, 2, 4].map((index) => <AtlasAvatar className={index === activeStep % 3 + 1 ? "is-selected" : ""} index={index} key={index}/>)}
+                  <h3>A presence your visitors will remember.</h3>
+                  <div className="builder-avatar-stage" aria-live="polite">
+                    {builderAvatars.map((avatar, index) => (
+                      <div
+                        aria-hidden={activeBuilderAvatarIndex !== index}
+                        className="builder-avatar-frame"
+                        data-active={activeBuilderAvatarIndex === index}
+                        key={avatar.name + "-" + avatar.kind}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img alt="" loading={index === 0 ? "eager" : "lazy"} src={avatar.imageUrl}/>
+                        <span>{avatar.kind}</span>
+                      </div>
+                    ))}
+                    <div className="builder-avatar-switcher" aria-hidden="true">
+                      {builderAvatars.map((avatar, index) => <i data-active={activeBuilderAvatarIndex === index} key={avatar.kind + "-indicator"}/>)}
+                    </div>
                   </div>
-                  <div className="builder-field"><span>Agent name</span><strong>{["Maya", "Maya · Product expert", "Maya · Sales guide", "Maya · Live"][activeStep]}</strong></div>
+                  <div className="builder-field"><span>Agent name</span><strong>{["Sarah · Sales partner", "Sarah · Animated", "Rumi · Animal avatar", "Sarah · Live"][activeStep]}</strong></div>
                   <button type="button">{["Use this avatar", "Add context", "Review behaviour", "Copy widget code"][activeStep]}<Icon name="arrow" size={16}/></button>
                 </div>
               </div>
@@ -634,7 +679,8 @@ export default function LandingPage({ authenticated }: LandingPageProps) {
           <div className="role-cards" data-reveal>
             {roles.map((role, index) => (
               <article className="role-card" key={role.name}>
-                <AtlasAvatar index={role.index}/>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img className="role-avatar-image" src={role.imageUrl} alt={role.name + ", " + role.role} loading="lazy"/>
                 <div className="role-card-number">0{index + 1}</div>
                 <div className="role-card-copy"><span>{role.role}</span><h3>{role.name}</h3><p>{role.line}</p></div>
                 <div className="role-wave" aria-hidden="true">{Array.from({length: 18}, (_, item) => <i key={item}/>)}</div>
