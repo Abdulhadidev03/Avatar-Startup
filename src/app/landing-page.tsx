@@ -741,7 +741,7 @@ export default function LandingPage({ authenticated }: LandingPageProps) {
           <a href="#use-cases" onClick={() => setMenuOpen(false)}>Use cases</a>
           <a href="#impact" onClick={() => setMenuOpen(false)}>Impact</a>
           <Link href="/pricing" onClick={() => setMenuOpen(false)}>Pricing</Link>
-          <a href="#developers" onClick={() => setMenuOpen(false)}>Developers</a>
+          {/* <a href="#developers" onClick={() => setMenuOpen(false)}>Developers</a> */}
         </nav>
         <div className="lp-nav-actions">
           {!authenticated && <Link className="lp-text-link" href="/sign-in">Sign in</Link>}
