@@ -14,6 +14,7 @@ export type LiveAgent = {
   profile_id: string | null;
   anam_avatar_id: string | null;
   anam_voice_id: string | null;
+  avatar_image_url: string | null;
 };
 
 async function anamGet<T>(path: string, apiKey: string): Promise<T | null> {
@@ -46,7 +47,7 @@ export async function listAnamAvatars(apiKey: string): Promise<AnamAvatar[]> {
 export async function getLiveAgent(): Promise<LiveAgent | null> {
   const { data } = await supabaseAdmin
     .from("agents")
-    .select("id, name, profile_id, anam_avatar_id, anam_voice_id")
+    .select("id, name, profile_id, anam_avatar_id, anam_voice_id, avatar_image_url")
     .eq("status", "Live")
     .order("created_at", { ascending: false })
     .limit(1)

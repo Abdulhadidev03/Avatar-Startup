@@ -149,6 +149,7 @@ export default function WidgetPage({
   const [speakerMuted, setSpeakerMuted] = useState(false);
   const [listening, setListening] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
+  const [showCallGate, setShowCallGate] = useState(true);
 
   const anamRef = useRef<AnamClient | null>(null);
   const sessionIdRef = useRef<string | null>(null);
@@ -383,6 +384,7 @@ export default function WidgetPage({
     async (rawText: string) => {
       const text = rawText.trim().slice(0, 1000);
       if (!text || sending) return;
+      setShowCallGate(false);
       setUserInput("");
       addMessage("user", text);
       await askBrain(text);
@@ -394,6 +396,7 @@ export default function WidgetPage({
   const startVoice = useCallback(
     async (options: { fresh?: boolean } = {}) => {
       if (voiceStartingRef.current) return;
+      setShowCallGate(false);
 
       if (anamRef.current?.isStreaming()) {
         if (anamRef.current.getInputAudioState().isMuted) {
@@ -576,6 +579,7 @@ export default function WidgetPage({
     sessionPromiseRef.current = null;
     setStatus("ended");
     setError(null);
+    setShowCallGate(true);
 
     if (activeSessionId) {
       void fetch("/api/analyze", {
@@ -648,7 +652,11 @@ export default function WidgetPage({
       }
 
       if (event.data?.type === "RUHANA_WIDGET_OPEN") {
-        window.requestAnimationFrame(() => composerRef.current?.focus());
+        if (!sessionIdRef.current && !anamRef.current?.isStreaming()) {
+          setShowCallGate(true);
+        } else {
+          window.requestAnimationFrame(() => composerRef.current?.focus());
+        }
       }
       if (event.data?.type === "LIVE_CONTEXT_UPDATE") {
         return;
@@ -722,6 +730,43 @@ export default function WidgetPage({
 
   return (
     <main className={`wgt-root is-${status}`} aria-label={`Chat with ${agentName}`}>
+      {showCallGate && !sessionOpen ? (
+        <section className="wgt-call-gate" aria-label={`Call ${agentName}`}>
+          <div className="wgt-call-gate-header">
+            <span className="wgt-call-gate-brand"><WidgetIcon name="brand"/> Ruhana</span>
+            <button type="button" aria-label="Minimize call options" onClick={minimize}><WidgetIcon name="minimize"/></button>
+          </div>
+          <div className="wgt-call-gate-body">
+            <div className="wgt-call-avatar">
+              {agent?.avatarImageUrl && !imageFailed ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={agent.avatarImageUrl} alt="" onError={() => setImageFailed(true)}/>
+              ) : (
+                <span>{initials || "R"}</span>
+              )}
+              <i aria-hidden="true"/>
+            </div>
+            <span className="wgt-call-availability">Available now</span>
+            <h1>Talk with {agentName}</h1>
+            <p>Ask naturally. Your Ruhana agent already understands the page you are on.</p>
+            <button className="wgt-start-call" type="button" onClick={() => void startVoice({ fresh: status === "ended" })}>
+              <WidgetIcon name="mic"/><span>Start call</span>
+            </button>
+            <button
+              className="wgt-use-text"
+              type="button"
+              onClick={() => {
+                setShowCallGate(false);
+                window.requestAnimationFrame(() => composerRef.current?.focus());
+              }}
+            >
+              Continue by text
+            </button>
+            <small>Microphone access is requested only after you start.</small>
+          </div>
+        </section>
+      ) : null}
+
       <header className="wgt-header">
         <span className="wgt-brand-mark" aria-hidden="true">
           <WidgetIcon name="brand" />
@@ -841,15 +886,17 @@ export default function WidgetPage({
           >
             <WidgetIcon name={speakerMuted ? "volumeOff" : "volume"} />
           </button>
-          <button
-            className="wgt-call-button wgt-call-button--end"
-            type="button"
-            aria-label="End conversation"
-            disabled={!sessionOpen}
-            onClick={() => void endSession()}
-          >
-            <WidgetIcon name="end" />
-          </button>
+          {sessionOpen ? (
+            <button
+              className="wgt-call-button wgt-call-button--end"
+              type="button"
+              aria-label="End call"
+              onClick={() => void endSession()}
+            >
+              <WidgetIcon name="end" />
+              <span>End call</span>
+            </button>
+          ) : null}
         </div>
       </section>
 

@@ -13,6 +13,7 @@ type LandingPageProps = {
 type DemoStatus = "idle" | "connecting" | "live" | "error" | "ended";
 type DemoMessage = { role: "user" | "assistant"; text: string };
 type DemoMedia = { id?: string | null; name?: string | null; imageUrl?: string | null; videoUrl?: string | null };
+const landingFallbackAvatar = avatarById("sarah");
 
 type IconName =
   | "arrow"
@@ -20,6 +21,7 @@ type IconName =
   | "chevron"
   | "close"
   | "code"
+  | "end"
   | "eye"
   | "mail"
   | "mic"
@@ -35,6 +37,7 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
     chevron: <path d="m9 18 6-6-6-6" />,
     close: <><path d="m6 6 12 12"/><path d="m18 6-12 12"/></>,
     code: <><path d="m8 9-4 3 4 3"/><path d="m16 9 4 3-4 3"/><path d="m14 5-4 14"/></>,
+    end: <path d="M6.3 15.8a8.5 8.5 0 0 1 11.4 0l1.2-2.2a1.5 1.5 0 0 0-.45-1.95 10.75 10.75 0 0 0-12.9 0 1.5 1.5 0 0 0-.45 1.95l1.2 2.2Z" />,
     eye: <><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6S2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.5"/></>,
     mail: <><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></>,
     mic: <><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></>,
@@ -353,6 +356,8 @@ function LiveDemo({ anchorRef }: { anchorRef: RefObject<HTMLDivElement | null> }
   const geometry = useDockedRect(anchorRef, expanded);
   const [status, setStatus] = useState<DemoStatus>("idle");
   const [media, setMedia] = useState<DemoMedia>({});
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const [callGateDismissed, setCallGateDismissed] = useState(false);
   const [messages, setMessages] = useState<DemoMessage[]>([
     { role: "assistant", text: "Hi — want help choosing the right plan for your team?" },
   ]);
@@ -366,15 +371,24 @@ function LiveDemo({ anchorRef }: { anchorRef: RefObject<HTMLDivElement | null> }
   const sessionPromiseRef = useRef<Promise<{ token: string; id: string }> | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const historyIndexRef = useRef(-1);
+  const voiceAttemptRef = useRef(0);
   const { getLiveContext, recentEventsRef } = useVisitorContext();
 
   const docked = geometry.shapeProgress > 0.72;
   const displayMode = expanded && docked ? "expanded" : docked ? "docked" : "hero";
+  const demoImageUrl = media.imageUrl ?? landingFallbackAvatar.imageUrl;
+  const demoName = media.name ?? landingFallbackAvatar.name;
+  const showDockedCallGate = expanded && docked && !callGateDismissed && (
+    status === "idle" || status === "connecting" || status === "ended"
+  );
 
   useEffect(() => {
     fetch("/api/landing-media")
       .then((response) => response.ok ? response.json() : {})
-      .then((data: DemoMedia) => setMedia(data))
+      .then((data: DemoMedia) => {
+        setMedia(data);
+        setPreviewFailed(false);
+      })
       .catch(() => undefined);
   }, []);
 
@@ -432,19 +446,30 @@ function LiveDemo({ anchorRef }: { anchorRef: RefObject<HTMLDivElement | null> }
 
   const connectVoice = useCallback(async () => {
     if (anamRef.current?.isStreaming()) return anamRef.current;
+    const attempt = voiceAttemptRef.current + 1;
+    voiceAttemptRef.current = attempt;
     setStatus("connecting");
     setError(null);
     setExpanded(true);
 
     try {
       const session = await getBackendSession();
+      if (voiceAttemptRef.current !== attempt) {
+        sessionRef.current = null;
+        return null;
+      }
       const { AnamEvent, createClient } = await import("@anam-ai/js-sdk");
       const anam = createClient(session.token);
       anamRef.current = anam;
       historyIndexRef.current = -1;
 
       anam.addListener(AnamEvent.SESSION_READY, () => {
+        if (voiceAttemptRef.current !== attempt) {
+          void anam.stopStreaming();
+          return;
+        }
         setStatus("live");
+        setCallGateDismissed(true);
         setMicMuted(false);
         setSpeakerMuted(false);
         const greeting = "Hi — I can see you’re exploring Ruhana. What would you like to know?";
@@ -454,6 +479,8 @@ function LiveDemo({ anchorRef }: { anchorRef: RefObject<HTMLDivElement | null> }
 
       anam.addListener(AnamEvent.MIC_PERMISSION_DENIED, () => {
         setMicMuted(true);
+        setCallGateDismissed(true);
+        setStatus("error");
         setError("Microphone access is off. You can still type below.");
       });
 
@@ -484,8 +511,13 @@ function LiveDemo({ anchorRef }: { anchorRef: RefObject<HTMLDivElement | null> }
       });
 
       await anam.streamToVideoElement("landing-avatar-video");
+      if (voiceAttemptRef.current !== attempt) {
+        await anam.stopStreaming();
+        return null;
+      }
       return anam;
     } catch (cause) {
+      if (voiceAttemptRef.current !== attempt) return null;
       setStatus("error");
       setMicMuted(true);
       setError(cause instanceof Error ? cause.message : "The live preview could not start.");
@@ -516,6 +548,7 @@ function LiveDemo({ anchorRef }: { anchorRef: RefObject<HTMLDivElement | null> }
     setSending(true);
     setError(null);
     setExpanded(true);
+    setCallGateDismissed(true);
     addMessage("user", text);
 
     try {
@@ -533,12 +566,14 @@ function LiveDemo({ anchorRef }: { anchorRef: RefObject<HTMLDivElement | null> }
   }, [addMessage, askBrain, getBackendSession, input, sending]);
 
   const endSession = useCallback(async () => {
+    voiceAttemptRef.current += 1;
     if (anamRef.current) await anamRef.current.stopStreaming();
     anamRef.current = null;
     sessionRef.current = null;
     setStatus("ended");
     setMicMuted(true);
-    setExpanded(false);
+    setCallGateDismissed(false);
+    setExpanded(true);
   }, []);
 
   if (!geometry.ready) return null;
@@ -559,25 +594,27 @@ function LiveDemo({ anchorRef }: { anchorRef: RefObject<HTMLDivElement | null> }
     >
       <div className="demo-hero-view">
         <div className="demo-video-panel">
-          {media.videoUrl ? (
+          {media.videoUrl && !previewFailed ? (
             <video
               autoPlay
               className="demo-avatar-video"
               id="landing-avatar-video"
               loop={status !== "live"}
               muted={speakerMuted || status !== "live"}
+              onError={() => setPreviewFailed(true)}
               playsInline
-              poster={media.imageUrl ?? undefined}
+              poster={demoImageUrl}
               src={status === "live" ? undefined : media.videoUrl}
             />
           ) : (
-            <AtlasAvatar className="demo-avatar-fallback" index={1} />
+            // eslint-disable-next-line @next/next/no-img-element
+            <img alt="" className="demo-avatar-fallback" src={demoImageUrl}/>
           )}
-          {!media.videoUrl && <video aria-hidden="true" className="demo-stream-target" id="landing-avatar-video" autoPlay playsInline />}
+          {(!media.videoUrl || previewFailed) && <video aria-hidden="true" className="demo-stream-target" id="landing-avatar-video" autoPlay playsInline />}
           <div className="demo-video-wash" />
           <div className="demo-live-label"><span /> {status === "live" ? "Live" : "Preview"}</div>
           <div className="demo-avatar-caption">
-            <strong>{media.name ?? "Ruhana guide"}</strong>
+            <strong>{demoName}</strong>
             <span>Ruhana product guide</span>
           </div>
           <button className="demo-sound" onClick={() => setSpeakerMuted((value) => !value)}
@@ -592,7 +629,10 @@ function LiveDemo({ anchorRef }: { anchorRef: RefObject<HTMLDivElement | null> }
               <span className="demo-kicker">Live conversation</span>
               <strong>Help, without the hunt.</strong>
             </div>
-            <span className="demo-presence"><i /> Available now</span>
+            <div className="demo-panel-actions">
+              <span className="demo-presence"><i /> Available now</span>
+              {status === "live" && <button className="demo-end-call" onClick={endSession} type="button"><Icon name="end" size={15}/> End call</button>}
+            </div>
           </div>
 
           <div className="demo-transcript" ref={transcriptRef} aria-live="polite">
@@ -628,27 +668,53 @@ function LiveDemo({ anchorRef }: { anchorRef: RefObject<HTMLDivElement | null> }
       </div>
 
       <div className="demo-compact-view">
-        <button className="demo-compact-main" onClick={() => setExpanded(true)} type="button" aria-label="Open Ruhana assistant">
-          {media.imageUrl ? (
-            <span
-              className="demo-thumb"
-              style={{ backgroundImage: `url(${media.imageUrl})` }}
-            />
+        <button className="demo-compact-main" onClick={() => { setCallGateDismissed(false); setExpanded(true); }} type="button" aria-label={"Open call options with " + demoName}>
+          <span className="demo-thumb">
+          {media.videoUrl && !previewFailed ? (
+            <video autoPlay loop muted onError={() => setPreviewFailed(true)} playsInline poster={demoImageUrl} src={media.videoUrl}/>
           ) : (
-            <AtlasAvatar className="demo-thumb" index={1} />
+            // eslint-disable-next-line @next/next/no-img-element
+            <img alt="" src={demoImageUrl}/>
           )}
-          <span className="demo-compact-copy"><strong>Need a hand?</strong><small>Ask Maya about this page</small></span>
+            <i aria-hidden="true"/>
+          </span>
+          <span className="demo-compact-copy"><strong>Need a hand?</strong><small>{"Talk with " + demoName + " about this page"}</small></span>
         </button>
         <button className="demo-compact-mic" data-active={status === "live" && !micMuted} onClick={handleMic}
-          type="button" aria-label={status === "live" ? (micMuted ? "Unmute microphone" : "Mute microphone") : "Talk to Maya"}>
+          type="button" aria-label={status === "live" ? (micMuted ? "Unmute microphone" : "Mute microphone") : "Start call with " + demoName}>
           <Icon name="mic" size={19}/>
         </button>
       </div>
 
+      {showDockedCallGate && (
+        <div className="demo-call-gate" data-connecting={status === "connecting"}>
+          <button className="demo-call-gate-close" onClick={() => setExpanded(false)} type="button" aria-label="Close call options"><Icon name="close" size={18}/></button>
+          <div className="demo-call-orbit">
+            {media.videoUrl && !previewFailed ? (
+              <video autoPlay loop muted onError={() => setPreviewFailed(true)} playsInline poster={demoImageUrl} src={media.videoUrl}/>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img alt="" src={demoImageUrl}/>
+            )}
+            <span aria-hidden="true"/>
+          </div>
+          <div className="demo-call-gate-copy">
+            <span>Available now</span>
+            <strong>{status === "connecting" ? "Connecting your call…" : "Talk with " + demoName}</strong>
+            <p>Ask a question naturally. Ruhana already understands the page you are viewing.</p>
+          </div>
+          <button className="demo-start-call" onClick={status === "connecting" ? endSession : connectVoice} type="button">
+            <Icon name={status === "connecting" ? "end" : "mic"} size={18}/>{status === "connecting" ? "Cancel" : "Start call"}
+          </button>
+          <button className="demo-continue-text" disabled={status === "connecting"} onClick={() => setCallGateDismissed(true)} type="button">Continue by text</button>
+          <small className="demo-call-permission">Microphone access is requested only after you start.</small>
+        </div>
+      )}
+
       <div className="demo-mobile-head">
-        <div><span className="demo-presence"><i /> {status === "live" ? "Live" : "Ready"}</span><strong>Maya · Ruhana</strong></div>
+        <div><span className="demo-presence"><i /> {status === "live" ? "Live" : "Ready"}</span><strong>{demoName} · Ruhana</strong></div>
         <div className="demo-mobile-actions">
-          {status === "live" && <button onClick={endSession} type="button">End</button>}
+          {(status === "live" || status === "connecting") && <button onClick={endSession} type="button"><Icon name="end" size={14}/> End call</button>}
           <button onClick={() => setExpanded(false)} type="button" aria-label="Minimize assistant"><Icon name="close"/></button>
         </div>
       </div>

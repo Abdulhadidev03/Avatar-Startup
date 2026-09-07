@@ -15,13 +15,22 @@ export async function GET() {
     // stream always show the same face.
     const avatar = await resolveLandingAvatar(apiKey, agent?.anam_avatar_id);
 
-    if (!avatar?.id) return NextResponse.json(EMPTY, { status: 200 });
+    if (!avatar?.id) {
+      return NextResponse.json(
+        {
+          ...EMPTY,
+          name: agent?.name ?? null,
+          imageUrl: agent?.avatar_image_url ?? null,
+        },
+        { status: 200 },
+      );
+    }
 
     return NextResponse.json(
       {
         id: avatar.id,
         name: agent?.name ?? avatar.displayName ?? "Ruhana guide",
-        imageUrl: avatar.imageUrl ?? null,
+        imageUrl: avatar.imageUrl ?? agent?.avatar_image_url ?? null,
         videoUrl: avatar.videoUrl ?? null,
       },
       {
