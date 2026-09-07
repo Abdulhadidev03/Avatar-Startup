@@ -753,7 +753,7 @@ export default function LandingPage({ authenticated }: LandingPageProps) {
         <section className="lp-hero" id="product">
           <div className="lp-hero-copy" data-reveal>
             <span className="lp-eyebrow"><i/> Context-aware video agents</span>
-            <h1>An agent that understands the page—and <em>knows what to do next.</em></h1>
+            <h1>An agent that understands the page and <em>knows what to do next.</em></h1>
             <p>Ruhana sees the products, clicks, questions, and intent behind every visit. Then it talks, guides, and takes action.</p>
             <div className="lp-hero-actions">
               <Link className="lp-button lp-button-dark" href={primaryHref}>{primaryLabel}<Icon name="arrow"/></Link>
