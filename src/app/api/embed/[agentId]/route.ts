@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { resolveLandingAvatar } from "@/lib/landing-demo";
 import { supabaseAdmin } from "@/lib/supabase";
+import { resolveLandingAvatar } from "@/lib/landing-demo";
 import { resolveStockAvatarImage } from "@/lib/stock-avatars";
 
 type EmbedAgent = {
