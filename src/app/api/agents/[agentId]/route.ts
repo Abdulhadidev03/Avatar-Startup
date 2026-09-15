@@ -52,17 +52,19 @@ export async function GET(_req: Request, ctx: RouteContext) {
     // pre-call face matches the live stream.
     let avatarImageUrl = resolveStockAvatarImage(agent.avatar_id, agent.avatar_image_url);
     const anamApiKey = process.env.ANAM_API_KEY;
-    if (!avatarImageUrl && anamApiKey) {
+    if (anamApiKey) {
       const effectiveAvatar = await resolveLandingAvatar(
         anamApiKey,
         agent.anam_avatar_id,
       );
-      avatarImageUrl = effectiveAvatar?.imageUrl ?? null;
+      avatarImageUrl = avatarImageUrl ?? effectiveAvatar?.imageUrl ?? null;
+      avatarPreviewVideoUrl = effectiveAvatar?.videoUrl ?? null;
     }
 
     return NextResponse.json({
       ...agent,
       avatar_image_url: avatarImageUrl,
+      avatar_preview_video_url: avatarPreviewVideoUrl,
       conversations,
       outcomes,
       conversionRate,

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveLandingAvatar } from "@/lib/landing-demo";
 import { supabaseAdmin } from "@/lib/supabase";
 import { resolveLandingAvatar } from "@/lib/landing-demo";
 import { resolveStockAvatarImage } from "@/lib/stock-avatars";
@@ -7,9 +8,10 @@ type EmbedAgent = {
   name: string;
   greeting: string;
   avatarImageUrl: string | null;
+  avatarVideoUrl: string | null;
 };
 
-function safeImageUrl(value: unknown) {
+function safeMediaUrl(value: unknown) {
   if (typeof value !== "string") return null;
   try {
     const url = new URL(value);
@@ -26,6 +28,7 @@ async function loadEmbedAgent(agentId: string): Promise<EmbedAgent> {
     name: "Ruhana",
     greeting: "Hi — how can I help?",
     avatarImageUrl: null,
+    avatarVideoUrl: null,
   };
 
   try {
@@ -94,17 +97,18 @@ export async function GET(
         '--line-strong:#d7dce1;--focus:#4c5a70;--success:#326552;',
         'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;',
         'font-size:14px;line-height:1.4;color:var(--ink)}',
-      '.rhn-launcher{position:fixed;right:max(20px,env(safe-area-inset-right));',
-        'bottom:max(20px,env(safe-area-inset-bottom));z-index:2147483646;',
-        'display:flex;width:min(342px,calc(100vw - 32px));flex-direction:column;gap:10px;',
-        'border:1px solid rgba(22,24,27,.1);border-radius:18px;background:rgba(253,253,253,.97);',
-        'padding:12px;box-shadow:0 18px 52px rgba(22,24,27,.16);backdrop-filter:blur(18px);',
-        'transition:opacity .18s ease,transform .22s cubic-bezier(.2,.75,.25,1),visibility .18s ease}',
+      '.rhn-launcher{position:fixed;right:max(22px,env(safe-area-inset-right));',
+        'bottom:max(22px,env(safe-area-inset-bottom));z-index:2147483646;',
+        'display:flex;width:min(352px,calc(100vw - 24px));height:122px;align-items:center;gap:8px;',
+        'border:1px solid rgba(31,38,35,.16);border-radius:18px;background:rgba(253,253,252,.99);',
+        'padding:8px;box-shadow:0 22px 58px rgba(25,31,29,.12);backdrop-filter:blur(18px);',
+        'transition:opacity .18s ease,transform .22s cubic-bezier(.2,.75,.25,1),visibility .18s ease,box-shadow .18s ease}',
+      '.rhn-launcher:hover{box-shadow:0 26px 68px rgba(25,31,29,.16)}',
       '.rhn-shell.rhn-open .rhn-launcher{visibility:hidden;opacity:0;pointer-events:none;transform:translateY(10px) scale(.97)}',
-      '.rhn-main{display:grid;width:100%;grid-template-columns:46px minmax(0,1fr) 24px;align-items:center;gap:10px;',
+      '.rhn-main{display:flex;min-width:0;height:100%;flex:1;align-items:center;gap:11px;',
         'border:0;background:transparent;color:var(--ink);padding:0;text-align:left;cursor:pointer}',
-      '.rhn-avatar{position:relative;display:flex;width:46px;height:46px;align-items:center;justify-content:center;',
-        'overflow:hidden;border:1px solid var(--line);border-radius:13px;background:var(--ink);color:#fff;',
+      '.rhn-avatar{position:relative;display:flex;width:84px;height:100%;flex:0 0 84px;align-items:center;justify-content:center;',
+        'overflow:hidden;border:0;border-radius:11px;background:#d9dfdb;color:#fff;',
         'font-size:15px;font-weight:700;letter-spacing:-.03em}',
       '.rhn-avatar-label{display:flex;align-items:center;justify-content:center;width:100%;height:100%}',
       '.rhn-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top}',
@@ -138,9 +142,9 @@ export async function GET(
       '.rhn-backdrop{position:fixed;z-index:2147483645;inset:0;display:none;border:0;background:rgba(22,24,27,.24);',
         'padding:0;opacity:0;pointer-events:none;backdrop-filter:blur(2px);transition:opacity .18s ease}',
       '.rhn-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}',
-      '.rhn-main:focus-visible,.rhn-quick button:focus-visible,.rhn-backdrop:focus-visible{outline:2px solid var(--focus);outline-offset:2px}',
+      '.rhn-main:focus-visible,.rhn-mic:focus-visible,.rhn-backdrop:focus-visible{outline:2px solid var(--focus);outline-offset:2px}',
       '@media(max-width:520px){',
-        '.rhn-launcher{right:16px;bottom:max(16px,env(safe-area-inset-bottom));width:calc(100vw - 32px)}',
+        '.rhn-launcher{right:12px;bottom:max(12px,env(safe-area-inset-bottom));width:min(390px,calc(100vw - 24px));height:108px}',
         '.rhn-panel{right:8px;bottom:max(8px,env(safe-area-inset-bottom));left:8px;width:auto;',
           'height:min(82dvh,620px);max-height:calc(100dvh - 16px);border-radius:20px 20px 14px 14px;',
           'transform:translateY(calc(100% + 24px));transform-origin:bottom center}',
@@ -148,18 +152,15 @@ export async function GET(
         '.rhn-backdrop{display:block}',
         '.rhn-shell.rhn-open .rhn-backdrop{opacity:1;pointer-events:auto}',
       '}',
-      '@media(max-width:360px){.rhn-launcher{right:10px;width:calc(100vw - 20px);padding:10px}.rhn-quick{grid-template-columns:minmax(0,1fr) 38px 42px}.rhn-mic span{display:none}}',
-      '@media(prefers-reduced-motion:reduce){.rhn-launcher,.rhn-panel,.rhn-backdrop,.rhn-open-icon,.rhn-quick button{transition-duration:.01ms!important;animation-duration:.01ms!important}}'
+      '@media(max-width:360px){.rhn-launcher{right:10px;width:calc(100vw - 20px)}.rhn-avatar{width:76px;flex-basis:76px}.rhn-copy strong{font-size:16px}.rhn-copy span{font-size:9px}}',
+      '@keyframes rhn-pulse{50%{box-shadow:0 0 0 8px rgba(89,112,103,.09)}}',
+      '@media(prefers-reduced-motion:reduce){.rhn-launcher,.rhn-panel,.rhn-backdrop,.rhn-mic{transition-duration:.01ms!important;animation-duration:.01ms!important}}'
     ].join('');
 
     function svgIcon(kind) {
       var span = document.createElement('span');
       span.setAttribute('aria-hidden', 'true');
-      if (kind === 'send') {
-        span.innerHTML = '<svg viewBox="0 0 24 24"><path d="m4 4 16 8-16 8 3-8-3-8Z"/><path d="M7 12h13"/></svg>';
-      } else {
-        span.innerHTML = '<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v4M9 21h6"/></svg>';
-      }
+      span.innerHTML = '<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v4M9 21h6"/></svg>';
       return span;
     }
 
@@ -246,41 +247,15 @@ export async function GET(
     openIcon.setAttribute('aria-hidden', 'true');
     mainButton.appendChild(avatar);
     mainButton.appendChild(copy);
-    mainButton.appendChild(openIcon);
-
-    var quickForm = document.createElement('form');
-    quickForm.className = 'rhn-quick';
-    var quickLabel = document.createElement('label');
-    quickLabel.className = 'rhn-sr';
-    quickLabel.htmlFor = HOST_ID + '-message';
-    quickLabel.textContent = 'Type a question for ' + AGENT.name;
-    var quickInput = document.createElement('input');
-    quickInput.id = HOST_ID + '-message';
-    quickInput.type = 'text';
-    quickInput.maxLength = 1000;
-    quickInput.autocomplete = 'off';
-    quickInput.placeholder = 'Type a question…';
-    var sendButton = document.createElement('button');
-    sendButton.className = 'rhn-send';
-    sendButton.type = 'submit';
-    sendButton.setAttribute('aria-label', 'Send message');
-    sendButton.appendChild(svgIcon('send'));
     var micButton = document.createElement('button');
     micButton.className = 'rhn-mic';
     micButton.type = 'button';
     micButton.setAttribute('aria-label', 'Start voice conversation');
     micButton.setAttribute('aria-pressed', 'false');
     micButton.appendChild(svgIcon('mic'));
-    var micText = document.createElement('span');
-    micText.textContent = 'Talk';
-    micButton.appendChild(micText);
-    quickForm.appendChild(quickLabel);
-    quickForm.appendChild(quickInput);
-    quickForm.appendChild(sendButton);
-    quickForm.appendChild(micButton);
 
     launcher.appendChild(mainButton);
-    launcher.appendChild(quickForm);
+    launcher.appendChild(micButton);
 
     var channel = window.crypto && typeof window.crypto.randomUUID === 'function'
       ? window.crypto.randomUUID()
@@ -537,17 +512,14 @@ export async function GET(
       micButton.classList.toggle('rhn-live', isLive && !widgetMicMuted);
       micButton.setAttribute('aria-pressed', String(isLive && !widgetMicMuted));
       if (isLive) {
-        micText.textContent = widgetMicMuted ? 'Unmute' : 'Mute';
         micButton.setAttribute('aria-label', widgetMicMuted ? 'Unmute microphone' : 'Mute microphone');
-        greeting.textContent = widgetMicMuted ? 'Live conversation · mic muted' : 'Live conversation · microphone on';
+        subcopy.textContent = widgetMicMuted ? 'Live conversation · microphone muted' : 'Live conversation · microphone on';
       } else if (widgetStatus === 'chatting' || widgetStatus === 'preparing') {
-        micText.textContent = 'Talk';
         micButton.setAttribute('aria-label', 'Start voice conversation');
-        greeting.textContent = 'Text chat ready · voice is optional';
+        subcopy.textContent = 'Conversation ready · voice is optional';
       } else {
-        micText.textContent = 'Talk';
         micButton.setAttribute('aria-label', 'Start voice conversation');
-        greeting.textContent = AGENT.greeting;
+        subcopy.textContent = 'Talk with ' + AGENT.name + ' about this page';
       }
     }
 
@@ -596,20 +568,6 @@ export async function GET(
 
     mainButton.addEventListener('click', function () {
       openPanel(mainButton);
-    });
-
-    quickForm.addEventListener('submit', function (event) {
-      event.preventDefault();
-      var text = quickInput.value.trim();
-      if (!text) {
-        openPanel(quickInput);
-        return;
-      }
-      quickInput.value = '';
-      openPanel(quickInput, {
-        type: 'RUHANA_WIDGET_SEND_TEXT',
-        detail: contextDetail({ text: text.slice(0, 1000), pageUrl: window.location.href })
-      });
     });
 
     micButton.addEventListener('click', function () {
