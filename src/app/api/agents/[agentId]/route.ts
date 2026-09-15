@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { resolveLandingAvatar } from "@/lib/landing-demo";
+import { resolveStockAvatarImage } from "@/lib/stock-avatars";
 
 type RouteContext = { params: Promise<{ agentId: string }> };
 
@@ -47,10 +48,9 @@ export async function GET(_req: Request, ctx: RouteContext) {
       else lastActive = `${Math.floor(mins / 1440)}d ago`;
     }
 
-    // The saved image can be empty even though the agent has an Anam avatar.
-    // Resolve the same effective avatar the session flow will use so the
-    // pre-call/fallback face never changes when live video begins.
-    let avatarImageUrl = agent.avatar_image_url ?? null;
+    // Prefer the stored custom/library still, then resolve Anam when needed so the
+    // pre-call face matches the live stream.
+    let avatarImageUrl = resolveStockAvatarImage(agent.avatar_id, agent.avatar_image_url);
     const anamApiKey = process.env.ANAM_API_KEY;
     if (!avatarImageUrl && anamApiKey) {
       const effectiveAvatar = await resolveLandingAvatar(

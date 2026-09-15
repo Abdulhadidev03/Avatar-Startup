@@ -119,7 +119,9 @@ export function AgentBuilder({ initialAvatarId, initialSource, resumeAgentId }: 
   const selectedAvatar = useMemo(() => avatars.find((avatar) => avatar.id === avatarId) ?? avatars[0], [avatarId]);
   const displayName = agentName.trim() || selectedAvatar.name;
   const appOrigin = typeof window !== "undefined" ? window.location.origin : "";
-  const embedCode = `<script src="${appOrigin}/api/embed/${launchedAgentId || storageId}" async></script>`;
+  const embedCode = launchedAgentId
+    ? `<script src="${appOrigin}/api/embed/${launchedAgentId}" async></script>`
+    : `<!-- Launch the agent first to get your install snippet -->`;
 
   const builderState = useMemo<StoredBuilderState>(() => ({
     step,
@@ -333,6 +335,9 @@ export function AgentBuilder({ initialAvatarId, initialSource, resumeAgentId }: 
       // If custom photo was uploaded and Anam created an avatar, use that ID;
       // otherwise fall back to the stock avatar's Anam ID
       const finalAnamAvatarId = customAnamAvatarId ?? selectedAvatarData?.anamAvatarId ?? null;
+      if (!avatarImageUrl && avatarSource === "library") {
+        avatarImageUrl = selectedAvatarData?.imageUrl ?? null;
+      }
 
       const res = await fetch("/api/agents", {
         method: "POST",
