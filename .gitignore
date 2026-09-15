@@ -19,7 +19,7 @@
 /artifacts/ruhana-pitch/node_modules/
 /artifacts/ruhana-pitch/.product-slide-work/
 /artifacts/ruhana-pitch/output/*.pptx
-/output/pdf/
+/output/*
 
 # local assistant workspace
 /.claude/
