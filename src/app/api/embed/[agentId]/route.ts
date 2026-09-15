@@ -38,15 +38,24 @@ export async function GET(
   try {
     const { data } = await supabaseAdmin
       .from("agents")
-      .select("name, greeting, avatar_image_url")
+      .select("name, greeting, avatar_image_url, anam_avatar_id")
       .eq("id", agentId)
       .maybeSingle();
 
     if (data) {
+      const avatarMedia = process.env.ANAM_API_KEY
+        ? await resolveLandingAvatar(
+            process.env.ANAM_API_KEY,
+            data.anam_avatar_id,
+          )
+        : null;
       agent = {
         name: data.name || agent.name,
         greeting: data.greeting || agent.greeting,
-        avatarImageUrl: safeImageUrl(data.avatar_image_url),
+        avatarImageUrl:
+          safeMediaUrl(data.avatar_image_url) ??
+          safeMediaUrl(avatarMedia?.imageUrl),
+        avatarVideoUrl: safeMediaUrl(avatarMedia?.videoUrl),
       };
     }
   } catch {
@@ -92,30 +101,20 @@ export async function GET(
       '.rhn-avatar{position:relative;display:flex;width:84px;height:100%;flex:0 0 84px;align-items:center;justify-content:center;',
         'overflow:hidden;border:0;border-radius:11px;background:#d9dfdb;color:#fff;',
         'font-size:15px;font-weight:700;letter-spacing:-.03em}',
-      '.rhn-avatar img{width:100%;height:100%;object-fit:cover;object-position:center top}',
-      '.rhn-presence{position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border:2px solid var(--pearl);',
-        'border-radius:50%;background:var(--success)}',
-      '.rhn-copy{display:flex;min-width:0;flex-direction:column;gap:2px}',
-      '.rhn-copy strong{overflow:hidden;color:var(--ink);font-size:13px;font-weight:680;letter-spacing:-.01em;text-overflow:ellipsis;white-space:nowrap}',
-      '.rhn-copy span{display:-webkit-box;overflow:hidden;color:var(--secondary);font-size:11px;line-height:1.35;',
-        '-webkit-box-orient:vertical;-webkit-line-clamp:2}',
-      '.rhn-open-icon{display:flex;width:24px;height:24px;align-items:center;justify-content:center;border-radius:7px;',
-        'color:var(--tertiary);font-size:18px;transition:background .15s ease,color .15s ease,transform .15s ease}',
-      '.rhn-main:hover .rhn-open-icon{background:var(--strong);color:var(--ink);transform:translateX(1px)}',
-      '.rhn-quick{display:grid;grid-template-columns:minmax(0,1fr) 38px 66px;gap:6px}',
-      '.rhn-quick input{min-width:0;height:40px;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface);',
-        'color:var(--ink);padding:0 10px;font:inherit;font-size:11px;outline:0}',
-      '.rhn-quick input::placeholder{color:var(--tertiary);opacity:1}',
-      '.rhn-quick input:focus{border-color:var(--focus);box-shadow:0 0 0 3px rgba(76,90,112,.1)}',
-      '.rhn-quick button{display:flex;height:40px;align-items:center;justify-content:center;gap:5px;border:1px solid var(--line-strong);',
-        'border-radius:10px;background:var(--surface);color:var(--ink);padding:0;cursor:pointer;font:inherit;font-size:10px;font-weight:680;',
-        'transition:background .15s ease,color .15s ease,transform .15s ease}',
-      '.rhn-quick button:hover{background:var(--strong);transform:translateY(-1px)}',
-      '.rhn-quick .rhn-send{border-color:var(--ink);background:var(--ink);color:#fff}',
-      '.rhn-quick .rhn-mic.rhn-live{border-color:var(--ink);background:var(--ink);color:#fff}',
-      '.rhn-quick svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}',
-      '.rhn-panel{position:fixed;right:max(20px,env(safe-area-inset-right));bottom:max(20px,env(safe-area-inset-bottom));',
-        'z-index:2147483647;width:388px;height:min(576px,calc(100dvh - 40px));border:0;border-radius:18px;',
+      '.rhn-avatar>img,.rhn-avatar>video{position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:cover;object-position:center 20%}',
+      '.rhn-avatar>video{z-index:2}',
+      '.rhn-presence{position:absolute;z-index:3;right:7px;bottom:7px;width:9px;height:9px;border:2px solid rgba(255,255,255,.92);',
+        'border-radius:50%;background:#5f8372;box-shadow:0 0 0 4px rgba(95,131,114,.12);animation:rhn-pulse 1.8s infinite}',
+      '.rhn-copy{display:flex;min-width:0;flex:1;flex-direction:column;gap:5px}',
+      '.rhn-copy strong{overflow:hidden;color:var(--ink);font-family:Georgia,"Times New Roman",serif;font-size:17px;font-weight:400;letter-spacing:-.02em;text-overflow:ellipsis;white-space:nowrap}',
+      '.rhn-copy span{overflow:hidden;color:var(--secondary);font-size:10px;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}',
+      '.rhn-mic{display:grid;width:47px;height:47px;flex:0 0 47px;place-items:center;border:0;border-radius:50%;',
+        'background:var(--ink);color:#fff;padding:0;cursor:pointer;transition:transform .15s ease,background .15s ease,box-shadow .15s ease}',
+      '.rhn-mic:hover{transform:translateY(-1px)}',
+      '.rhn-mic.rhn-live{background:#597067;box-shadow:0 0 0 8px rgba(89,112,103,.09);animation:rhn-pulse 1.8s infinite}',
+      '.rhn-mic svg{display:block;width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}',
+      '.rhn-panel{position:fixed;right:max(22px,env(safe-area-inset-right));bottom:max(22px,env(safe-area-inset-bottom));',
+        'z-index:2147483647;width:410px;height:min(610px,calc(100dvh - 44px));border:0;border-radius:20px;',
         'background:transparent;box-shadow:0 28px 90px rgba(22,24,27,.22);opacity:0;pointer-events:none;',
         'transform:translateY(18px) scale(.94);transform-origin:bottom right;',
         'transition:opacity .18s ease,transform .24s cubic-bezier(.2,.8,.25,1)}',
@@ -175,8 +174,19 @@ export async function GET(
       image.src = AGENT.avatarImageUrl;
       image.alt = '';
       image.addEventListener('error', function () { image.remove(); });
-      avatar.textContent = '';
       avatar.appendChild(image);
+    }
+    if (AGENT.avatarVideoUrl) {
+      var previewVideo = document.createElement('video');
+      previewVideo.src = AGENT.avatarVideoUrl;
+      previewVideo.autoplay = true;
+      previewVideo.loop = true;
+      previewVideo.muted = true;
+      previewVideo.playsInline = true;
+      if (AGENT.avatarImageUrl) previewVideo.poster = AGENT.avatarImageUrl;
+      previewVideo.setAttribute('aria-hidden', 'true');
+      previewVideo.addEventListener('error', function () { previewVideo.remove(); });
+      avatar.appendChild(previewVideo);
     }
     var presence = document.createElement('i');
     presence.className = 'rhn-presence';
@@ -185,18 +195,13 @@ export async function GET(
 
     var copy = document.createElement('span');
     copy.className = 'rhn-copy';
-    var name = document.createElement('strong');
-    name.textContent = AGENT.name;
-    var greeting = document.createElement('span');
-    greeting.textContent = AGENT.greeting;
-    greeting.setAttribute('aria-live', 'polite');
-    copy.appendChild(name);
-    copy.appendChild(greeting);
-
-    var openIcon = document.createElement('span');
-    openIcon.className = 'rhn-open-icon';
-    openIcon.textContent = '›';
-    openIcon.setAttribute('aria-hidden', 'true');
+    var prompt = document.createElement('strong');
+    prompt.textContent = 'Need a hand?';
+    var subcopy = document.createElement('span');
+    subcopy.textContent = 'Talk with ' + AGENT.name + ' about this page';
+    subcopy.setAttribute('aria-live', 'polite');
+    copy.appendChild(prompt);
+    copy.appendChild(subcopy);
     mainButton.appendChild(avatar);
     mainButton.appendChild(copy);
     var micButton = document.createElement('button');
