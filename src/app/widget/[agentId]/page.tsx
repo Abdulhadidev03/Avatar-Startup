@@ -55,6 +55,7 @@ interface AgentConfig {
   name: string;
   greeting: string;
   avatarImageUrl: string | null;
+  avatarVideoUrl: string | null;
 }
 
 type IconName =
@@ -149,6 +150,7 @@ export default function WidgetPage({
   const [speakerMuted, setSpeakerMuted] = useState(false);
   const [listening, setListening] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
+  const [previewFailed, setPreviewFailed] = useState(false);
   const [showCallGate, setShowCallGate] = useState(true);
 
   const anamRef = useRef<AnamClient | null>(null);
@@ -207,10 +209,12 @@ export default function WidgetPage({
           name: data.name ?? "Ruhana",
           greeting,
           avatarImageUrl: data.avatar_image_url ?? null,
+          avatarVideoUrl: data.avatar_preview_video_url ?? null,
         };
         greetingRef.current = greeting;
         setAgent(nextAgent);
         setImageFailed(false);
+        setPreviewFailed(false);
         setMessages((current) => {
           if (current.length) return current;
           messageIdRef.current += 1;
@@ -229,6 +233,7 @@ export default function WidgetPage({
           name: "Ruhana",
           greeting: "Hi! How can I help you today?",
           avatarImageUrl: null,
+          avatarVideoUrl: null,
         };
         greetingRef.current = fallback.greeting;
         setAgent(fallback);
@@ -732,13 +737,20 @@ export default function WidgetPage({
     <main className={`wgt-root is-${status}`} aria-label={`Chat with ${agentName}`}>
       {showCallGate && !sessionOpen ? (
         <section className="wgt-call-gate" aria-label={`Call ${agentName}`}>
-          <div className="wgt-call-gate-header">
-            <span className="wgt-call-gate-brand"><WidgetIcon name="brand"/> Ruhana</span>
-            <button type="button" aria-label="Minimize call options" onClick={minimize}><WidgetIcon name="minimize"/></button>
-          </div>
+          <button className="wgt-call-gate-close" type="button" aria-label="Minimize call options" onClick={minimize}><WidgetIcon name="minimize"/></button>
           <div className="wgt-call-gate-body">
             <div className="wgt-call-avatar">
-              {agent?.avatarImageUrl && !imageFailed ? (
+              {agent?.avatarVideoUrl && !previewFailed ? (
+                <video
+                  src={agent.avatarVideoUrl}
+                  poster={agent.avatarImageUrl ?? undefined}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  onError={() => setPreviewFailed(true)}
+                />
+              ) : agent?.avatarImageUrl && !imageFailed ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={agent.avatarImageUrl} alt="" onError={() => setImageFailed(true)}/>
               ) : (
@@ -768,24 +780,23 @@ export default function WidgetPage({
       ) : null}
 
       <header className="wgt-header">
-        <span className="wgt-brand-mark" aria-hidden="true">
-          <WidgetIcon name="brand" />
-        </span>
         <span className="wgt-identity">
-          <strong>{agentName}</strong>
           <span className="wgt-status" role="status" aria-live="polite">
             <i data-status={status} />
             {label}
           </span>
+          <strong>{agentName} · Ruhana</strong>
         </span>
-        <button
-          className="wgt-icon-button"
-          type="button"
-          aria-label="Minimize conversation"
-          onClick={minimize}
-        >
-          <WidgetIcon name="minimize" />
-        </button>
+        <span className="wgt-header-actions">
+          {sessionOpen ? (
+            <button className="wgt-end-call" type="button" onClick={() => void endSession()}>
+              <WidgetIcon name="end" /><span>End call</span>
+            </button>
+          ) : null}
+          <button className="wgt-icon-button" type="button" aria-label="Minimize conversation" onClick={minimize}>
+            <WidgetIcon name="minimize" />
+          </button>
+        </span>
       </header>
 
       <section className="wgt-stage" aria-label="Avatar video">
@@ -799,7 +810,18 @@ export default function WidgetPage({
         />
 
         <div className="wgt-avatar-fallback" aria-hidden={status === "connected"}>
-          {agent?.avatarImageUrl && !imageFailed ? (
+          {agent?.avatarVideoUrl && !previewFailed ? (
+            <video
+              className="wgt-preview-video"
+              src={agent.avatarVideoUrl}
+              poster={agent.avatarImageUrl ?? undefined}
+              autoPlay
+              loop
+              muted
+              playsInline
+              onError={() => setPreviewFailed(true)}
+            />
+          ) : agent?.avatarImageUrl && !imageFailed ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={agent.avatarImageUrl}
@@ -809,9 +831,9 @@ export default function WidgetPage({
           ) : (
             <span>{initials || "R"}</span>
           )}
-          <div>
-            <small>Available now</small>
-            <strong>Ask by voice or text</strong>
+          <div className="wgt-avatar-caption">
+            <strong>{agentName}</strong>
+            <small>Ruhana website assistant</small>
           </div>
         </div>
 
@@ -849,33 +871,7 @@ export default function WidgetPage({
           </div>
         ) : null}
 
-        {status === "connected" ? (
-          <span className="wgt-live-label">
-            <i /> {listening ? "Listening" : "Live"}
-          </span>
-        ) : null}
-
         <div className="wgt-call-controls" aria-label="Voice controls">
-          <button
-            className={`wgt-call-button ${
-              status === "connected" && !micMuted ? "is-active" : ""
-            }`}
-            type="button"
-            aria-label={
-              status !== "connected"
-                ? "Start voice conversation"
-                : micMuted
-                  ? "Unmute microphone"
-                  : "Mute microphone"
-            }
-            aria-pressed={status === "connected" ? !micMuted : undefined}
-            disabled={voiceBusy}
-            onClick={toggleMicrophone}
-          >
-            <WidgetIcon
-              name={status === "connected" && !micMuted ? "mic" : "micOff"}
-            />
-          </button>
           <button
             className="wgt-call-button"
             type="button"
@@ -886,25 +882,10 @@ export default function WidgetPage({
           >
             <WidgetIcon name={speakerMuted ? "volumeOff" : "volume"} />
           </button>
-          {sessionOpen ? (
-            <button
-              className="wgt-call-button wgt-call-button--end"
-              type="button"
-              aria-label="End call"
-              onClick={() => void endSession()}
-            >
-              <WidgetIcon name="end" />
-              <span>End call</span>
-            </button>
-          ) : null}
         </div>
       </section>
 
       <section className="wgt-conversation" aria-label="Conversation transcript">
-        <div className="wgt-conversation-heading">
-          <span>Conversation</span>
-          <small>Private to this session</small>
-        </div>
         <div
           ref={transcriptRef}
           className="wgt-transcript"
@@ -953,6 +934,17 @@ export default function WidgetPage({
             }}
           />
           <button
+            className={`wgt-composer-mic ${status === "connected" && !micMuted ? "is-active" : ""}`}
+            type="button"
+            aria-label={status !== "connected" ? "Start voice conversation" : micMuted ? "Unmute microphone" : "Mute microphone"}
+            aria-pressed={status === "connected" ? !micMuted : undefined}
+            disabled={voiceBusy}
+            onClick={toggleMicrophone}
+          >
+            <WidgetIcon name={status === "connected" && !micMuted ? "mic" : "micOff"} />
+          </button>
+          <button
+            className="wgt-composer-send"
             type="submit"
             aria-label="Send message"
             disabled={!userInput.trim() || sending}

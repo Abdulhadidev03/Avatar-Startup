@@ -58,23 +58,24 @@ async function getAvailableAvatars(apiKey: string) {
 function resolveAvatarId(
   avatars: AvatarRecord[],
   preferred: string | null,
-  preferCustom: boolean,
 ) {
-  // If the agent's preferred avatar exists in Anam, use it
   if (preferred && avatars.some((avatar) => avatar.id === preferred)) {
     return preferred;
   }
 
+  const environmentAvatar = process.env.ANAM_AVATAR_ID ?? null;
+  if (
+    environmentAvatar &&
+    avatars.some((avatar) => avatar.id === environmentAvatar)
+  ) {
+    return environmentAvatar;
+  }
+
   const orgCustom =
     avatars.find((avatar) => avatar.id && avatar.createdByOrganizationId)?.id ?? null;
-  if (preferCustom && orgCustom) return orgCustom;
-
-  const environmentAvatar = process.env.ANAM_AVATAR_ID ?? null;
-  if (environmentAvatar) return environmentAvatar;
 
   return (
-    avatars.find((avatar) => avatar.id && !avatar.createdByOrganizationId)?.id
-    ?? orgCustom
+    orgCustom
     ?? avatars.find((avatar) => avatar.id)?.id
     ?? preferred
     ?? null
@@ -145,7 +146,6 @@ export async function POST(request: NextRequest) {
       const avatarId = resolveAvatarId(
         avatars,
         agentConfig?.avatarId ?? null,
-        Boolean(agentConfig?.imageUrl),
       );
       const voiceId = agentConfig?.voiceId ?? fallbackVoiceId;
       if (!avatarId || !voiceId) {

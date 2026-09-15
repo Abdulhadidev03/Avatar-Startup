@@ -17,6 +17,12 @@
 # generated presentation working files
 /artifacts/ruhana-pitch/.build/
 /artifacts/ruhana-pitch/node_modules/
+/artifacts/ruhana-pitch/.product-slide-work/
+/artifacts/ruhana-pitch/output/*.pptx
+/output/pdf/
+
+# local assistant workspace
+/.claude/
 
 # next.js
 /.next/

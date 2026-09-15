@@ -3,14 +3,23 @@
 import { useEffect, useState } from "react";
 
 export default function TestContextPage() {
-  const [selectedAgentId, setSelectedAgentId] = useState<string>(
-    "771f5571-f969-47db-9daf-8ae158c6607a"
-
-  );
+  const [selectedAgentId, setSelectedAgentId] = useState("");
   const [scrollDepth, setScrollDepth] = useState(0);
   const [visibleSection, setVisibleSection] = useState("Hero Overview");
   const [lastClick, setLastClick] = useState("None");
-  const [copiedNotification, setCopiedNotification] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/agents")
+      .then((response) => response.json())
+      .then((agents) => {
+        if (cancelled || !Array.isArray(agents)) return;
+        const agent = agents.find((item) => item.status === "Live") ?? agents[0];
+        if (typeof agent?.id === "string") setSelectedAgentId(agent.id);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
 
   // Live HUD tracker to demonstrate what the embed script detects
   useEffect(() => {
@@ -60,6 +69,7 @@ export default function TestContextPage() {
 
   // Mount embed script dynamically
   useEffect(() => {
+    if (!selectedAgentId) return;
     const existing = document.getElementById("test-ruhana-embed");
     if (existing) existing.remove();
 
@@ -69,7 +79,7 @@ export default function TestContextPage() {
 
     const script = document.createElement("script");
     script.id = "test-ruhana-embed";
-    script.src = `/api/embed/${selectedAgentId}`;
+    script.src = `/api/embed/${selectedAgentId}?preview=parity-v1`;
     script.async = true;
     document.body.appendChild(script);
 

@@ -51,18 +51,21 @@ export async function GET(_req: Request, ctx: RouteContext) {
     // Resolve the same effective avatar the session flow will use so the
     // pre-call/fallback face never changes when live video begins.
     let avatarImageUrl = agent.avatar_image_url ?? null;
+    let avatarPreviewVideoUrl: string | null = null;
     const anamApiKey = process.env.ANAM_API_KEY;
-    if (!avatarImageUrl && anamApiKey) {
+    if (anamApiKey) {
       const effectiveAvatar = await resolveLandingAvatar(
         anamApiKey,
         agent.anam_avatar_id,
       );
-      avatarImageUrl = effectiveAvatar?.imageUrl ?? null;
+      avatarImageUrl = avatarImageUrl ?? effectiveAvatar?.imageUrl ?? null;
+      avatarPreviewVideoUrl = effectiveAvatar?.videoUrl ?? null;
     }
 
     return NextResponse.json({
       ...agent,
       avatar_image_url: avatarImageUrl,
+      avatar_preview_video_url: avatarPreviewVideoUrl,
       conversations,
       outcomes,
       conversionRate,

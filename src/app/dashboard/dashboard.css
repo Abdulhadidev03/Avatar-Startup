@@ -3852,17 +3852,33 @@
 .ruh-preview-site-content > div { height: 85px; margin-top: 8px; border-radius: 10px; background: #eff2f4; }
 .ruh-preview-site-content > div:last-child { width: 70%; height: 50px; margin-top: 0; }
 .ruh-site-preview.is-dark .ruh-preview-site-content > * { opacity: 0.18; }
-.ruh-widget-preview { position: absolute; right: 15px; bottom: 15px; display: flex; align-items: flex-end; flex-direction: column; gap: 8px; }
+.ruh-widget-preview { position: absolute; right: 15px; bottom: 15px; z-index: 4; display: flex; align-items: flex-end; flex-direction: column; }
 .ruh-widget-preview.is-left { right: auto; left: 15px; align-items: flex-start; }
-.ruh-widget-message { display: grid; width: min(285px, calc(100vw - 90px)); grid-template-columns: 40px minmax(0, 1fr) 23px; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255, 255, 255, 0.96); box-shadow: 0 16px 42px rgba(30, 38, 48, 0.16); padding: 10px; }
-.ruh-widget-message .ruh-avatar-portrait { width: 40px; height: 40px; border-radius: 9px; }
-.ruh-widget-message > span { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
-.ruh-widget-message strong { font-size: 11px; }
-.ruh-widget-message small { overflow: hidden; color: var(--ink-secondary); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.ruh-widget-message > button { display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center; border: 0; border-radius: 8px; background: transparent; color: var(--ink-tertiary); cursor: pointer; }
-.ruh-widget-launcher { display: flex; align-items: center; gap: 8px; border: 0; border-radius: 999px; background: var(--ink); color: white; padding: 5px 12px 5px 5px; box-shadow: 0 10px 28px rgba(25, 31, 37, 0.2); cursor: pointer; }
-.ruh-widget-launcher .ruh-avatar-portrait { width: 36px; height: 36px; border-radius: 50%; }
-.ruh-widget-launcher span { font-size: 10px; font-weight: 650; }
+.ruh-widget-compact-preview { display: flex; width: min(352px, calc(100vw - 90px)); height: 122px; align-items: center; gap: 8px; border: 1px solid rgba(31, 38, 35, 0.16); border-radius: 18px; background: rgba(253, 253, 252, 0.99); box-shadow: 0 22px 58px rgba(25, 31, 29, 0.12); padding: 8px; }
+.ruh-widget-compact-main { display: flex; min-width: 0; height: 100%; flex: 1; align-items: center; gap: 11px; border: 0; background: transparent; color: #161b19; padding: 0; text-align: left; cursor: pointer; }
+.ruh-widget-preview-avatar { position: relative; display: block; width: 84px; height: 100%; flex: 0 0 84px; overflow: hidden; border-radius: 11px; background: #d9dfdb; }
+.ruh-widget-preview-avatar > .ruh-avatar-portrait,
+.ruh-widget-preview-avatar > img { width: 100%; height: 100%; border-radius: 0; object-fit: cover; }
+.ruh-widget-preview-avatar .ruh-avatar-real-image { width: 100%; height: 100%; object-fit: cover; object-position: center 20%; }
+.ruh-widget-preview-avatar > i { position: absolute; right: 7px; bottom: 7px; width: 9px; height: 9px; border: 2px solid rgba(255, 255, 255, 0.92); border-radius: 50%; background: #5f8372; box-shadow: 0 0 0 4px rgba(95, 131, 114, 0.12); }
+.ruh-widget-compact-main > span:last-child { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 5px; }
+.ruh-widget-compact-main strong { overflow: hidden; font-family: Georgia, "Times New Roman", serif; font-size: 17px; font-weight: 400; letter-spacing: -0.02em; text-overflow: ellipsis; white-space: nowrap; }
+.ruh-widget-compact-main small { overflow: hidden; color: #626b67; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.ruh-widget-preview-mic { display: grid; width: 47px; height: 47px; flex: 0 0 47px; place-items: center; border: 0; border-radius: 50%; background: #161b19; color: #fff; padding: 0; cursor: pointer; }
+.ruh-widget-preview-mic svg,
+.ruh-widget-start-preview svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ruh-widget-call-preview { position: relative; display: flex; width: min(352px, calc(100vw - 90px)); height: 410px; align-items: center; justify-content: center; flex-direction: column; overflow: hidden; border: 1px solid rgba(31, 38, 35, 0.16); border-radius: 20px; background: linear-gradient(155deg, #fbfcfa 0%, #eef2ef 100%); box-shadow: 0 24px 70px rgba(22, 27, 25, 0.18); padding: 30px 24px 22px; color: #161b19; text-align: center; }
+.ruh-widget-call-preview > button:first-child { position: absolute; top: 12px; right: 12px; display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid #e3e7e4; border-radius: 10px; background: rgba(255, 255, 255, 0.72); color: #626b67; cursor: pointer; }
+.ruh-widget-call-avatar { position: relative; width: 126px; height: 126px; margin-bottom: 16px; border-radius: 50%; padding: 6px; background: conic-gradient(from 40deg, rgba(86, 112, 99, 0.72), rgba(255, 255, 255, 0.72), rgba(148, 125, 108, 0.42), rgba(86, 112, 99, 0.72)); }
+.ruh-widget-call-avatar > .ruh-avatar-portrait,
+.ruh-widget-call-avatar > img { width: 100%; height: 100%; overflow: hidden; border: 3px solid rgba(255, 255, 255, 0.82); border-radius: 50%; object-fit: cover; }
+.ruh-widget-call-avatar .ruh-avatar-real-image { width: 100%; height: 100%; object-fit: cover; object-position: center 20%; }
+.ruh-widget-call-avatar > i { position: absolute; right: 14px; bottom: 15px; width: 13px; height: 13px; border: 3px solid #f6f8f5; border-radius: 50%; background: #5f8372; }
+.ruh-widget-call-preview > span { color: #5b776a; font-size: 8px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+.ruh-widget-call-preview > strong { margin: 6px 0 7px; font-family: Georgia, "Times New Roman", serif; font-size: 23px; font-weight: 400; letter-spacing: -0.035em; }
+.ruh-widget-call-preview > p { max-width: 265px; margin: 0 0 15px; color: #626b67; font-size: 10px; line-height: 1.5; }
+.ruh-widget-start-preview { display: inline-flex; min-width: 154px; height: 42px; align-items: center; justify-content: center; gap: 7px; border: 0; border-radius: 999px; background: #161b19; color: #fff; font-size: 10px; font-weight: 670; cursor: pointer; }
+.ruh-widget-call-preview > small { margin-top: 8px; color: #626b67; font-size: 9px; }
 .ruh-custom-avatar-image { object-fit: cover; background-image: none; }
 
 .ruh-launch-checklist { display: flex; flex-wrap: wrap; gap: 14px; margin: 0 32px 21px; color: var(--success); font-size: 10px; }

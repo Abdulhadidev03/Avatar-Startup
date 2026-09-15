@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
+import { resolveLandingAvatar } from "@/lib/landing-demo";
 import { supabaseAdmin } from "@/lib/supabase";
 
 type EmbedAgent = {
   name: string;
   greeting: string;
   avatarImageUrl: string | null;
+  avatarVideoUrl: string | null;
 };
 
-function safeImageUrl(value: unknown) {
+function safeMediaUrl(value: unknown) {
   if (typeof value !== "string") return null;
   try {
     const url = new URL(value);
@@ -30,20 +32,30 @@ export async function GET(
     name: "Ruhana",
     greeting: "Hi — how can I help?",
     avatarImageUrl: null,
+    avatarVideoUrl: null,
   };
 
   try {
     const { data } = await supabaseAdmin
       .from("agents")
-      .select("name, greeting, avatar_image_url")
+      .select("name, greeting, avatar_image_url, anam_avatar_id")
       .eq("id", agentId)
       .maybeSingle();
 
     if (data) {
+      const avatarMedia = process.env.ANAM_API_KEY
+        ? await resolveLandingAvatar(
+            process.env.ANAM_API_KEY,
+            data.anam_avatar_id,
+          )
+        : null;
       agent = {
         name: data.name || agent.name,
         greeting: data.greeting || agent.greeting,
-        avatarImageUrl: safeImageUrl(data.avatar_image_url),
+        avatarImageUrl:
+          safeMediaUrl(data.avatar_image_url) ??
+          safeMediaUrl(avatarMedia?.imageUrl),
+        avatarVideoUrl: safeMediaUrl(avatarMedia?.videoUrl),
       };
     }
   } catch {
@@ -76,42 +88,33 @@ export async function GET(
         '--line-strong:#d7dce1;--focus:#4c5a70;--success:#326552;',
         'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;',
         'font-size:14px;line-height:1.4;color:var(--ink)}',
-      '.rhn-launcher{position:fixed;right:max(20px,env(safe-area-inset-right));',
-        'bottom:max(20px,env(safe-area-inset-bottom));z-index:2147483646;',
-        'display:flex;width:min(342px,calc(100vw - 32px));flex-direction:column;gap:10px;',
-        'border:1px solid rgba(22,24,27,.1);border-radius:18px;background:rgba(253,253,253,.97);',
-        'padding:12px;box-shadow:0 18px 52px rgba(22,24,27,.16);backdrop-filter:blur(18px);',
-        'transition:opacity .18s ease,transform .22s cubic-bezier(.2,.75,.25,1),visibility .18s ease}',
+      '.rhn-launcher{position:fixed;right:max(22px,env(safe-area-inset-right));',
+        'bottom:max(22px,env(safe-area-inset-bottom));z-index:2147483646;',
+        'display:flex;width:min(352px,calc(100vw - 24px));height:122px;align-items:center;gap:8px;',
+        'border:1px solid rgba(31,38,35,.16);border-radius:18px;background:rgba(253,253,252,.99);',
+        'padding:8px;box-shadow:0 22px 58px rgba(25,31,29,.12);backdrop-filter:blur(18px);',
+        'transition:opacity .18s ease,transform .22s cubic-bezier(.2,.75,.25,1),visibility .18s ease,box-shadow .18s ease}',
+      '.rhn-launcher:hover{box-shadow:0 26px 68px rgba(25,31,29,.16)}',
       '.rhn-shell.rhn-open .rhn-launcher{visibility:hidden;opacity:0;pointer-events:none;transform:translateY(10px) scale(.97)}',
-      '.rhn-main{display:grid;width:100%;grid-template-columns:46px minmax(0,1fr) 24px;align-items:center;gap:10px;',
+      '.rhn-main{display:flex;min-width:0;height:100%;flex:1;align-items:center;gap:11px;',
         'border:0;background:transparent;color:var(--ink);padding:0;text-align:left;cursor:pointer}',
-      '.rhn-avatar{position:relative;display:flex;width:46px;height:46px;align-items:center;justify-content:center;',
-        'overflow:hidden;border:1px solid var(--line);border-radius:13px;background:var(--ink);color:#fff;',
+      '.rhn-avatar{position:relative;display:flex;width:84px;height:100%;flex:0 0 84px;align-items:center;justify-content:center;',
+        'overflow:hidden;border:0;border-radius:11px;background:#d9dfdb;color:#fff;',
         'font-size:15px;font-weight:700;letter-spacing:-.03em}',
-      '.rhn-avatar img{width:100%;height:100%;object-fit:cover;object-position:center top}',
-      '.rhn-presence{position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border:2px solid var(--pearl);',
-        'border-radius:50%;background:var(--success)}',
-      '.rhn-copy{display:flex;min-width:0;flex-direction:column;gap:2px}',
-      '.rhn-copy strong{overflow:hidden;color:var(--ink);font-size:13px;font-weight:680;letter-spacing:-.01em;text-overflow:ellipsis;white-space:nowrap}',
-      '.rhn-copy span{display:-webkit-box;overflow:hidden;color:var(--secondary);font-size:11px;line-height:1.35;',
-        '-webkit-box-orient:vertical;-webkit-line-clamp:2}',
-      '.rhn-open-icon{display:flex;width:24px;height:24px;align-items:center;justify-content:center;border-radius:7px;',
-        'color:var(--tertiary);font-size:18px;transition:background .15s ease,color .15s ease,transform .15s ease}',
-      '.rhn-main:hover .rhn-open-icon{background:var(--strong);color:var(--ink);transform:translateX(1px)}',
-      '.rhn-quick{display:grid;grid-template-columns:minmax(0,1fr) 38px 66px;gap:6px}',
-      '.rhn-quick input{min-width:0;height:40px;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface);',
-        'color:var(--ink);padding:0 10px;font:inherit;font-size:11px;outline:0}',
-      '.rhn-quick input::placeholder{color:var(--tertiary);opacity:1}',
-      '.rhn-quick input:focus{border-color:var(--focus);box-shadow:0 0 0 3px rgba(76,90,112,.1)}',
-      '.rhn-quick button{display:flex;height:40px;align-items:center;justify-content:center;gap:5px;border:1px solid var(--line-strong);',
-        'border-radius:10px;background:var(--surface);color:var(--ink);padding:0;cursor:pointer;font:inherit;font-size:10px;font-weight:680;',
-        'transition:background .15s ease,color .15s ease,transform .15s ease}',
-      '.rhn-quick button:hover{background:var(--strong);transform:translateY(-1px)}',
-      '.rhn-quick .rhn-send{border-color:var(--ink);background:var(--ink);color:#fff}',
-      '.rhn-quick .rhn-mic.rhn-live{border-color:var(--ink);background:var(--ink);color:#fff}',
-      '.rhn-quick svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}',
-      '.rhn-panel{position:fixed;right:max(20px,env(safe-area-inset-right));bottom:max(20px,env(safe-area-inset-bottom));',
-        'z-index:2147483647;width:388px;height:min(576px,calc(100dvh - 40px));border:0;border-radius:18px;',
+      '.rhn-avatar>img,.rhn-avatar>video{position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:cover;object-position:center 20%}',
+      '.rhn-avatar>video{z-index:2}',
+      '.rhn-presence{position:absolute;z-index:3;right:7px;bottom:7px;width:9px;height:9px;border:2px solid rgba(255,255,255,.92);',
+        'border-radius:50%;background:#5f8372;box-shadow:0 0 0 4px rgba(95,131,114,.12);animation:rhn-pulse 1.8s infinite}',
+      '.rhn-copy{display:flex;min-width:0;flex:1;flex-direction:column;gap:5px}',
+      '.rhn-copy strong{overflow:hidden;color:var(--ink);font-family:Georgia,"Times New Roman",serif;font-size:17px;font-weight:400;letter-spacing:-.02em;text-overflow:ellipsis;white-space:nowrap}',
+      '.rhn-copy span{overflow:hidden;color:var(--secondary);font-size:10px;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}',
+      '.rhn-mic{display:grid;width:47px;height:47px;flex:0 0 47px;place-items:center;border:0;border-radius:50%;',
+        'background:var(--ink);color:#fff;padding:0;cursor:pointer;transition:transform .15s ease,background .15s ease,box-shadow .15s ease}',
+      '.rhn-mic:hover{transform:translateY(-1px)}',
+      '.rhn-mic.rhn-live{background:#597067;box-shadow:0 0 0 8px rgba(89,112,103,.09);animation:rhn-pulse 1.8s infinite}',
+      '.rhn-mic svg{display:block;width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}',
+      '.rhn-panel{position:fixed;right:max(22px,env(safe-area-inset-right));bottom:max(22px,env(safe-area-inset-bottom));',
+        'z-index:2147483647;width:410px;height:min(610px,calc(100dvh - 44px));border:0;border-radius:20px;',
         'background:transparent;box-shadow:0 28px 90px rgba(22,24,27,.22);opacity:0;pointer-events:none;',
         'transform:translateY(18px) scale(.94);transform-origin:bottom right;',
         'transition:opacity .18s ease,transform .24s cubic-bezier(.2,.8,.25,1)}',
@@ -119,9 +122,9 @@ export async function GET(
       '.rhn-backdrop{position:fixed;z-index:2147483645;inset:0;display:none;border:0;background:rgba(22,24,27,.24);',
         'padding:0;opacity:0;pointer-events:none;backdrop-filter:blur(2px);transition:opacity .18s ease}',
       '.rhn-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}',
-      '.rhn-main:focus-visible,.rhn-quick button:focus-visible,.rhn-backdrop:focus-visible{outline:2px solid var(--focus);outline-offset:2px}',
+      '.rhn-main:focus-visible,.rhn-mic:focus-visible,.rhn-backdrop:focus-visible{outline:2px solid var(--focus);outline-offset:2px}',
       '@media(max-width:520px){',
-        '.rhn-launcher{right:16px;bottom:max(16px,env(safe-area-inset-bottom));width:calc(100vw - 32px)}',
+        '.rhn-launcher{right:12px;bottom:max(12px,env(safe-area-inset-bottom));width:min(390px,calc(100vw - 24px));height:108px}',
         '.rhn-panel{right:8px;bottom:max(8px,env(safe-area-inset-bottom));left:8px;width:auto;',
           'height:min(82dvh,620px);max-height:calc(100dvh - 16px);border-radius:20px 20px 14px 14px;',
           'transform:translateY(calc(100% + 24px));transform-origin:bottom center}',
@@ -129,18 +132,15 @@ export async function GET(
         '.rhn-backdrop{display:block}',
         '.rhn-shell.rhn-open .rhn-backdrop{opacity:1;pointer-events:auto}',
       '}',
-      '@media(max-width:360px){.rhn-launcher{right:10px;width:calc(100vw - 20px);padding:10px}.rhn-quick{grid-template-columns:minmax(0,1fr) 38px 42px}.rhn-mic span{display:none}}',
-      '@media(prefers-reduced-motion:reduce){.rhn-launcher,.rhn-panel,.rhn-backdrop,.rhn-open-icon,.rhn-quick button{transition-duration:.01ms!important;animation-duration:.01ms!important}}'
+      '@media(max-width:360px){.rhn-launcher{right:10px;width:calc(100vw - 20px)}.rhn-avatar{width:76px;flex-basis:76px}.rhn-copy strong{font-size:16px}.rhn-copy span{font-size:9px}}',
+      '@keyframes rhn-pulse{50%{box-shadow:0 0 0 8px rgba(89,112,103,.09)}}',
+      '@media(prefers-reduced-motion:reduce){.rhn-launcher,.rhn-panel,.rhn-backdrop,.rhn-mic{transition-duration:.01ms!important;animation-duration:.01ms!important}}'
     ].join('');
 
     function svgIcon(kind) {
       var span = document.createElement('span');
       span.setAttribute('aria-hidden', 'true');
-      if (kind === 'send') {
-        span.innerHTML = '<svg viewBox="0 0 24 24"><path d="m4 4 16 8-16 8 3-8-3-8Z"/><path d="M7 12h13"/></svg>';
-      } else {
-        span.innerHTML = '<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v4M9 21h6"/></svg>';
-      }
+      span.innerHTML = '<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v4M9 21h6"/></svg>';
       return span;
     }
 
@@ -174,8 +174,19 @@ export async function GET(
       image.src = AGENT.avatarImageUrl;
       image.alt = '';
       image.addEventListener('error', function () { image.remove(); });
-      avatar.textContent = '';
       avatar.appendChild(image);
+    }
+    if (AGENT.avatarVideoUrl) {
+      var previewVideo = document.createElement('video');
+      previewVideo.src = AGENT.avatarVideoUrl;
+      previewVideo.autoplay = true;
+      previewVideo.loop = true;
+      previewVideo.muted = true;
+      previewVideo.playsInline = true;
+      if (AGENT.avatarImageUrl) previewVideo.poster = AGENT.avatarImageUrl;
+      previewVideo.setAttribute('aria-hidden', 'true');
+      previewVideo.addEventListener('error', function () { previewVideo.remove(); });
+      avatar.appendChild(previewVideo);
     }
     var presence = document.createElement('i');
     presence.className = 'rhn-presence';
@@ -184,55 +195,24 @@ export async function GET(
 
     var copy = document.createElement('span');
     copy.className = 'rhn-copy';
-    var name = document.createElement('strong');
-    name.textContent = AGENT.name;
-    var greeting = document.createElement('span');
-    greeting.textContent = AGENT.greeting;
-    greeting.setAttribute('aria-live', 'polite');
-    copy.appendChild(name);
-    copy.appendChild(greeting);
-
-    var openIcon = document.createElement('span');
-    openIcon.className = 'rhn-open-icon';
-    openIcon.textContent = '›';
-    openIcon.setAttribute('aria-hidden', 'true');
+    var prompt = document.createElement('strong');
+    prompt.textContent = 'Need a hand?';
+    var subcopy = document.createElement('span');
+    subcopy.textContent = 'Talk with ' + AGENT.name + ' about this page';
+    subcopy.setAttribute('aria-live', 'polite');
+    copy.appendChild(prompt);
+    copy.appendChild(subcopy);
     mainButton.appendChild(avatar);
     mainButton.appendChild(copy);
-    mainButton.appendChild(openIcon);
-
-    var quickForm = document.createElement('form');
-    quickForm.className = 'rhn-quick';
-    var quickLabel = document.createElement('label');
-    quickLabel.className = 'rhn-sr';
-    quickLabel.htmlFor = HOST_ID + '-message';
-    quickLabel.textContent = 'Type a question for ' + AGENT.name;
-    var quickInput = document.createElement('input');
-    quickInput.id = HOST_ID + '-message';
-    quickInput.type = 'text';
-    quickInput.maxLength = 1000;
-    quickInput.autocomplete = 'off';
-    quickInput.placeholder = 'Type a question…';
-    var sendButton = document.createElement('button');
-    sendButton.className = 'rhn-send';
-    sendButton.type = 'submit';
-    sendButton.setAttribute('aria-label', 'Send message');
-    sendButton.appendChild(svgIcon('send'));
     var micButton = document.createElement('button');
     micButton.className = 'rhn-mic';
     micButton.type = 'button';
     micButton.setAttribute('aria-label', 'Start voice conversation');
     micButton.setAttribute('aria-pressed', 'false');
     micButton.appendChild(svgIcon('mic'));
-    var micText = document.createElement('span');
-    micText.textContent = 'Talk';
-    micButton.appendChild(micText);
-    quickForm.appendChild(quickLabel);
-    quickForm.appendChild(quickInput);
-    quickForm.appendChild(sendButton);
-    quickForm.appendChild(micButton);
 
     launcher.appendChild(mainButton);
-    launcher.appendChild(quickForm);
+    launcher.appendChild(micButton);
 
     var channel = window.crypto && typeof window.crypto.randomUUID === 'function'
       ? window.crypto.randomUUID()
@@ -477,17 +457,14 @@ export async function GET(
       micButton.classList.toggle('rhn-live', isLive && !widgetMicMuted);
       micButton.setAttribute('aria-pressed', String(isLive && !widgetMicMuted));
       if (isLive) {
-        micText.textContent = widgetMicMuted ? 'Unmute' : 'Mute';
         micButton.setAttribute('aria-label', widgetMicMuted ? 'Unmute microphone' : 'Mute microphone');
-        greeting.textContent = widgetMicMuted ? 'Live conversation · mic muted' : 'Live conversation · microphone on';
+        subcopy.textContent = widgetMicMuted ? 'Live conversation · microphone muted' : 'Live conversation · microphone on';
       } else if (widgetStatus === 'chatting' || widgetStatus === 'preparing') {
-        micText.textContent = 'Talk';
         micButton.setAttribute('aria-label', 'Start voice conversation');
-        greeting.textContent = 'Text chat ready · voice is optional';
+        subcopy.textContent = 'Conversation ready · voice is optional';
       } else {
-        micText.textContent = 'Talk';
         micButton.setAttribute('aria-label', 'Start voice conversation');
-        greeting.textContent = AGENT.greeting;
+        subcopy.textContent = 'Talk with ' + AGENT.name + ' about this page';
       }
     }
 
@@ -536,20 +513,6 @@ export async function GET(
 
     mainButton.addEventListener('click', function () {
       openPanel(mainButton);
-    });
-
-    quickForm.addEventListener('submit', function (event) {
-      event.preventDefault();
-      var text = quickInput.value.trim();
-      if (!text) {
-        openPanel(quickInput);
-        return;
-      }
-      quickInput.value = '';
-      openPanel(quickInput, {
-        type: 'RUHANA_WIDGET_SEND_TEXT',
-        detail: contextDetail({ text: text.slice(0, 1000), pageUrl: window.location.href })
-      });
     });
 
     micButton.addEventListener('click', function () {
