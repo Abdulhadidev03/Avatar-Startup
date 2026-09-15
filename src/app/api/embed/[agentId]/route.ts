@@ -41,23 +41,20 @@ async function loadEmbedAgent(agentId: string): Promise<EmbedAgent> {
 
     let avatarImageUrl =
       resolveStockAvatarImage(data.avatar_id, data.avatar_image_url) ??
-      safeMediaUrl(data.avatar_image_url);
-    let avatarVideoUrl: string | null = null;
+      safeImageUrl(data.avatar_image_url);
 
-    if (process.env.ANAM_API_KEY) {
+    if (!avatarImageUrl && process.env.ANAM_API_KEY) {
       const effective = await resolveLandingAvatar(
         process.env.ANAM_API_KEY,
         data.anam_avatar_id,
       );
-      avatarImageUrl = avatarImageUrl ?? safeMediaUrl(effective?.imageUrl);
-      avatarVideoUrl = safeMediaUrl(effective?.videoUrl);
+      avatarImageUrl = safeImageUrl(effective?.imageUrl) ?? null;
     }
 
     return {
       name: data.name || fallback.name,
       greeting: data.greeting || fallback.greeting,
       avatarImageUrl,
-      avatarVideoUrl,
     };
   } catch {
     return fallback;
