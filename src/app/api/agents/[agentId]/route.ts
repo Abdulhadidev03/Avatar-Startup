@@ -51,6 +51,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
     // Prefer the stored custom/library still, then resolve Anam when needed so the
     // pre-call face matches the live stream.
     let avatarImageUrl = resolveStockAvatarImage(agent.avatar_id, agent.avatar_image_url);
+    let avatarPreviewVideoUrl: string | null = null;
     const anamApiKey = process.env.ANAM_API_KEY;
     if (anamApiKey) {
       const effectiveAvatar = await resolveLandingAvatar(
