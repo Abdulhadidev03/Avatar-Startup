@@ -109,10 +109,6 @@ function ConfigureTab({ agent, onUpdated }: { agent: FrontendAgent; onUpdated: (
         }
         avatarImageUrl = data.url ?? avatarImageUrl;
         anamAvatarId = data.anamAvatarId;
-      } else if (!pendingFileName && !customPreview) {
-        const stock = avatars.find((item) => item.id === avatarId);
-        avatarImageUrl = stock?.imageUrl ?? null;
-        anamAvatarId = stock?.anamAvatarId ?? null;
       }
 
       const updates: Record<string, unknown> = { name, role, greeting, tone, responseLength, language, instructions, avatarId, avatarImageUrl };

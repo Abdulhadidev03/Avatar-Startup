@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveLandingAvatar } from "@/lib/landing-demo";
 import { supabaseAdmin } from "@/lib/supabase";
-import { resolveLandingAvatar } from "@/lib/landing-demo";
-import { resolveStockAvatarImage } from "@/lib/stock-avatars";
 
 type EmbedAgent = {
   name: string;
@@ -23,8 +21,14 @@ function safeMediaUrl(value: unknown) {
   }
 }
 
-async function loadEmbedAgent(agentId: string): Promise<EmbedAgent> {
-  const fallback: EmbedAgent = {
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ agentId: string }> },
+) {
+  const { agentId } = await params;
+  const { origin } = new URL(req.url);
+
+  let agent: EmbedAgent = {
     name: "Ruhana",
     greeting: "Hi — how can I help?",
     avatarImageUrl: null,
@@ -34,41 +38,20 @@ async function loadEmbedAgent(agentId: string): Promise<EmbedAgent> {
   try {
     const { data } = await supabaseAdmin
       .from("agents")
-      .select("name, greeting, avatar_id, avatar_image_url, anam_avatar_id")
+      .select("name, greeting, avatar_image_url")
       .eq("id", agentId)
       .maybeSingle();
 
-    if (!data) return fallback;
-
-    let avatarImageUrl =
-      resolveStockAvatarImage(data.avatar_id, data.avatar_image_url) ??
-      safeImageUrl(data.avatar_image_url);
-
-    if (!avatarImageUrl && process.env.ANAM_API_KEY) {
-      const effective = await resolveLandingAvatar(
-        process.env.ANAM_API_KEY,
-        data.anam_avatar_id,
-      );
-      avatarImageUrl = safeImageUrl(effective?.imageUrl) ?? null;
+    if (data) {
+      agent = {
+        name: data.name || agent.name,
+        greeting: data.greeting || agent.greeting,
+        avatarImageUrl: safeImageUrl(data.avatar_image_url),
+      };
     }
-
-    return {
-      name: data.name || fallback.name,
-      greeting: data.greeting || fallback.greeting,
-      avatarImageUrl,
-    };
   } catch {
-    return fallback;
+    // The generic Ruhana identity keeps the launcher usable if config is unavailable.
   }
-}
-
-export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ agentId: string }> },
-) {
-  const { agentId } = await params;
-  const { origin } = new URL(req.url);
-  const agent = await loadEmbedAgent(agentId);
 
   const js = /* js */ `
 (function () {
@@ -78,7 +61,6 @@ export async function GET(
   var AGENT_ID = ${JSON.stringify(agentId)};
   var AGENT = ${JSON.stringify(agent)};
   var HOST_ID = 'ruhana-widget-' + AGENT_ID;
-
 
   function mount() {
     if (document.getElementById(HOST_ID)) return;
@@ -110,8 +92,7 @@ export async function GET(
       '.rhn-avatar{position:relative;display:flex;width:84px;height:100%;flex:0 0 84px;align-items:center;justify-content:center;',
         'overflow:hidden;border:0;border-radius:11px;background:#d9dfdb;color:#fff;',
         'font-size:15px;font-weight:700;letter-spacing:-.03em}',
-      '.rhn-avatar-label{display:flex;align-items:center;justify-content:center;width:100%;height:100%}',
-      '.rhn-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top}',
+      '.rhn-avatar img{width:100%;height:100%;object-fit:cover;object-position:center top}',
       '.rhn-presence{position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border:2px solid var(--pearl);',
         'border-radius:50%;background:var(--success)}',
       '.rhn-copy{display:flex;min-width:0;flex-direction:column;gap:2px}',
@@ -188,9 +169,15 @@ export async function GET(
 
     var avatar = document.createElement('span');
     avatar.className = 'rhn-avatar';
-    var avatarLabel = document.createElement('span');
-    avatarLabel.className = 'rhn-avatar-label';
-    avatar.appendChild(avatarLabel);
+    avatar.textContent = (AGENT.name || 'R').split(/\\s+/).map(function (part) { return part.charAt(0); }).join('').slice(0, 2).toUpperCase() || 'R';
+    if (AGENT.avatarImageUrl) {
+      var image = document.createElement('img');
+      image.src = AGENT.avatarImageUrl;
+      image.alt = '';
+      image.addEventListener('error', function () { image.remove(); });
+      avatar.textContent = '';
+      avatar.appendChild(image);
+    }
     var presence = document.createElement('i');
     presence.className = 'rhn-presence';
     presence.setAttribute('aria-hidden', 'true');
@@ -199,47 +186,12 @@ export async function GET(
     var copy = document.createElement('span');
     copy.className = 'rhn-copy';
     var name = document.createElement('strong');
+    name.textContent = AGENT.name;
     var greeting = document.createElement('span');
+    greeting.textContent = AGENT.greeting;
     greeting.setAttribute('aria-live', 'polite');
     copy.appendChild(name);
     copy.appendChild(greeting);
-
-    function initialsFor(value) {
-      return (value || 'R').split(/\\s+/).map(function (part) { return part.charAt(0); }).join('').slice(0, 2).toUpperCase() || 'R';
-    }
-
-    function applyAgentIdentity(next) {
-      if (!next) return;
-      if (next.name) AGENT.name = next.name;
-      if (next.greeting) AGENT.greeting = next.greeting;
-      if (Object.prototype.hasOwnProperty.call(next, 'avatarImageUrl')) {
-        AGENT.avatarImageUrl = next.avatarImageUrl || null;
-      }
-
-      name.textContent = AGENT.name;
-      if (typeof widgetStatus === 'undefined' || widgetStatus === 'idle') {
-        greeting.textContent = AGENT.greeting;
-      }
-      mainButton.setAttribute('aria-label', 'Open conversation with ' + AGENT.name);
-      if (typeof quickLabel !== 'undefined') quickLabel.textContent = 'Type a question for ' + AGENT.name;
-      if (typeof panel !== 'undefined') panel.title = 'Conversation with ' + AGENT.name;
-
-      var existingImage = avatar.querySelector('img');
-      if (existingImage) existingImage.remove();
-      avatarLabel.textContent = initialsFor(AGENT.name);
-      avatarLabel.hidden = false;
-      if (AGENT.avatarImageUrl) {
-        var image = document.createElement('img');
-        image.src = AGENT.avatarImageUrl;
-        image.alt = '';
-        image.addEventListener('error', function () { image.remove(); avatarLabel.hidden = false; });
-        image.addEventListener('load', function () { avatarLabel.hidden = true; });
-        avatar.insertBefore(image, presence);
-        avatarLabel.hidden = true;
-      }
-    }
-
-    applyAgentIdentity(AGENT);
 
     var openIcon = document.createElement('span');
     openIcon.className = 'rhn-open-icon';
@@ -287,18 +239,6 @@ export async function GET(
     var pageStartedAt = Date.now();
     var scrollMarks = {};
     var scrollUpdateTimer = null;
-
-    // Refresh identity from the live agent record (name / greeting / photo).
-    fetch(ORIGIN + '/api/agents/' + encodeURIComponent(AGENT_ID) + '/widget', {
-      method: 'GET',
-      credentials: 'omit',
-      cache: 'no-store'
-    }).then(function (response) {
-      if (!response.ok) return null;
-      return response.json();
-    }).then(function (payload) {
-      if (payload && payload.name) applyAgentIdentity(payload);
-    }).catch(function () {});
 
     try {
       var storedJourney = window.sessionStorage.getItem(journeyKey);
@@ -626,7 +566,7 @@ export async function GET(
   return new NextResponse(js, {
     headers: {
       "Content-Type": "application/javascript; charset=utf-8",
-      "Cache-Control": "public, max-age=15, stale-while-revalidate=60",
+      "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
       "Access-Control-Allow-Origin": "*",
       "Cross-Origin-Resource-Policy": "cross-origin",
       "X-Content-Type-Options": "nosniff",
