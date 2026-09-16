@@ -40,11 +40,25 @@ export async function listAnamAvatars(apiKey: string): Promise<AnamAvatar[]> {
 }
 
 /**
- * The agent the public landing demo speaks as: the most recently created Live
- * agent. Both the preview media and the session route must agree on this, so
- * neither should run the query itself.
+ * The agent the public landing demo speaks as. A local or deployment-specific
+ * LANDING_DEMO_AGENT_ID can pin the demo without changing any installed widget;
+ * otherwise the most recently created Live agent remains the default. Both the
+ * preview media and the session route use this resolver so they cannot disagree.
  */
 export async function getLiveAgent(): Promise<LiveAgent | null> {
+  const preferredAgentId = process.env.LANDING_DEMO_AGENT_ID?.trim();
+
+  if (preferredAgentId) {
+    const { data: preferredAgent } = await supabaseAdmin
+      .from("agents")
+      .select("id, name, profile_id, anam_avatar_id, anam_voice_id, avatar_image_url")
+      .eq("id", preferredAgentId)
+      .eq("status", "Live")
+      .maybeSingle();
+
+    if (preferredAgent) return preferredAgent as LiveAgent;
+  }
+
   const { data } = await supabaseAdmin
     .from("agents")
     .select("id, name, profile_id, anam_avatar_id, anam_voice_id, avatar_image_url")

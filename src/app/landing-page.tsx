@@ -483,376 +483,376 @@ function useVisitorContext() {
   return { getLiveContext, recentEventsRef };
 }
 
-// function LiveDemo({ anchorRef }: { anchorRef: RefObject<HTMLDivElement | null> }) {
-//   const [expanded, setExpanded] = useState(false);
-//   const geometry = useDockedRect(anchorRef, expanded);
-//   const [status, setStatus] = useState<DemoStatus>("idle");
-//   const [media, setMedia] = useState<DemoMedia>({});
-//   const [previewFailed, setPreviewFailed] = useState(false);
-//   const [callGateDismissed, setCallGateDismissed] = useState(false);
-//   const [messages, setMessages] = useState<DemoMessage[]>([
-//     { role: "assistant", text: "Hi — want help choosing the right plan for your team?" },
-//   ]);
-//   const [input, setInput] = useState("");
-//   const [sending, setSending] = useState(false);
-//   const [micMuted, setMicMuted] = useState(true);
-//   const [speakerMuted, setSpeakerMuted] = useState(false);
-//   const [error, setError] = useState<string | null>(null);
-//   const anamRef = useRef<AnamClient | null>(null);
-//   const sessionRef = useRef<{ token: string; id: string } | null>(null);
-//   const sessionPromiseRef = useRef<Promise<{ token: string; id: string }> | null>(null);
-//   const transcriptRef = useRef<HTMLDivElement>(null);
-//   const historyIndexRef = useRef(-1);
-//   const voiceAttemptRef = useRef(0);
-//   const { getLiveContext, recentEventsRef } = useVisitorContext();
+function LiveDemo({ anchorRef }: { anchorRef: RefObject<HTMLDivElement | null> }) {
+  const [expanded, setExpanded] = useState(false);
+  const geometry = useDockedRect(anchorRef, expanded);
+  const [status, setStatus] = useState<DemoStatus>("idle");
+  const [media, setMedia] = useState<DemoMedia>({});
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const [callGateDismissed, setCallGateDismissed] = useState(false);
+  const [messages, setMessages] = useState<DemoMessage[]>([
+    { role: "assistant", text: "Hi — want help choosing the right plan for your team?" },
+  ]);
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [micMuted, setMicMuted] = useState(true);
+  const [speakerMuted, setSpeakerMuted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const anamRef = useRef<AnamClient | null>(null);
+  const sessionRef = useRef<{ token: string; id: string } | null>(null);
+  const sessionPromiseRef = useRef<Promise<{ token: string; id: string }> | null>(null);
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const historyIndexRef = useRef(-1);
+  const voiceAttemptRef = useRef(0);
+  const { getLiveContext, recentEventsRef } = useVisitorContext();
 
-//   const docked = geometry.shapeProgress > 0.72;
-//   const displayMode = expanded && docked ? "expanded" : docked ? "docked" : "hero";
-//   const demoImageUrl = media.imageUrl ?? landingFallbackAvatar.imageUrl;
-//   const demoName = media.name ?? landingFallbackAvatar.name;
-//   const showDockedCallGate = expanded && docked && !callGateDismissed && (
-//     status === "idle" || status === "connecting" || status === "ended"
-//   );
+  const docked = geometry.shapeProgress > 0.72;
+  const displayMode = expanded && docked ? "expanded" : docked ? "docked" : "hero";
+  const demoImageUrl = media.imageUrl ?? landingFallbackAvatar.imageUrl;
+  const demoName = media.name ?? landingFallbackAvatar.name;
+  const showDockedCallGate = expanded && docked && !callGateDismissed && (
+    status === "idle" || status === "connecting" || status === "ended"
+  );
 
-//   useEffect(() => {
-//     fetch("/api/landing-media")
-//       .then((response) => response.ok ? response.json() : {})
-//       .then((data: DemoMedia) => {
-//         setMedia(data);
-//         setPreviewFailed(false);
-//       })
-//       .catch(() => undefined);
-//   }, []);
+  useEffect(() => {
+    fetch("/api/landing-media")
+      .then((response) => response.ok ? response.json() : {})
+      .then((data: DemoMedia) => {
+        setMedia(data);
+        setPreviewFailed(false);
+      })
+      .catch(() => undefined);
+  }, []);
 
-//   useEffect(() => {
-//     transcriptRef.current?.scrollTo({ top: transcriptRef.current.scrollHeight, behavior: "smooth" });
-//   }, [messages]);
+  useEffect(() => {
+    transcriptRef.current?.scrollTo({ top: transcriptRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages]);
 
-//   useEffect(() => {
-//     const video = document.getElementById("landing-avatar-video") as HTMLVideoElement | null;
-//     if (video) video.muted = speakerMuted || status !== "live";
-//   }, [speakerMuted, status]);
+  useEffect(() => {
+    const video = document.getElementById("landing-avatar-video") as HTMLVideoElement | null;
+    if (video) video.muted = speakerMuted || status !== "live";
+  }, [speakerMuted, status]);
 
-//   useEffect(() => () => {
-//     if (anamRef.current) void anamRef.current.stopStreaming();
-//   }, []);
+  useEffect(() => () => {
+    if (anamRef.current) void anamRef.current.stopStreaming();
+  }, []);
 
-//   const addMessage = useCallback((role: DemoMessage["role"], text: string) => {
-//     setMessages((current) => [...current, { role, text }]);
-//   }, []);
+  const addMessage = useCallback((role: DemoMessage["role"], text: string) => {
+    setMessages((current) => [...current, { role, text }]);
+  }, []);
 
-//   const getBackendSession = useCallback(async () => {
-//     if (sessionRef.current) return sessionRef.current;
-//     if (sessionPromiseRef.current) return sessionPromiseRef.current;
+  const getBackendSession = useCallback(async () => {
+    if (sessionRef.current) return sessionRef.current;
+    if (sessionPromiseRef.current) return sessionPromiseRef.current;
 
-//     sessionPromiseRef.current = fetch("/api/demo-session", { method: "POST" })
-//       .then(async (response) => {
-//         const body = await response.json();
-//         if (!response.ok) throw new Error(body.error ?? "The live preview could not start.");
-//         const session = { token: body.sessionToken as string, id: body.sessionId as string };
-//         sessionRef.current = session;
-//         return session;
-//       })
-//       .finally(() => {
-//         sessionPromiseRef.current = null;
-//       });
+    sessionPromiseRef.current = fetch("/api/demo-session", { method: "POST" })
+      .then(async (response) => {
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error ?? "The live preview could not start.");
+        const session = { token: body.sessionToken as string, id: body.sessionId as string };
+        sessionRef.current = session;
+        return session;
+      })
+      .finally(() => {
+        sessionPromiseRef.current = null;
+      });
 
-//     return sessionPromiseRef.current;
-//   }, []);
+    return sessionPromiseRef.current;
+  }, []);
 
-//   const askBrain = useCallback(async (text: string, id: string) => {
-//     const response = await fetch("/api/brain", {
-//       method: "POST",
-//       headers: { "Content-Type": "application/json" },
-//       body: JSON.stringify({
-//         sessionId: id,
-//         userText: text,
-//         liveContext: getLiveContext(),
-//         recentEvents: recentEventsRef.current.slice(-15),
-//       }),
-//     });
-//     const body = await response.json();
-//     if (!response.ok) throw new Error(body.error ?? "Ruhana could not answer just now.");
-//     return String(body.replyText ?? "").trim();
-//   }, [getLiveContext, recentEventsRef]);
+  const askBrain = useCallback(async (text: string, id: string) => {
+    const response = await fetch("/api/brain", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: id,
+        userText: text,
+        liveContext: getLiveContext(),
+        recentEvents: recentEventsRef.current.slice(-15),
+      }),
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error ?? "Ruhana could not answer just now.");
+    return String(body.replyText ?? "").trim();
+  }, [getLiveContext, recentEventsRef]);
 
-//   const connectVoice = useCallback(async () => {
-//     if (anamRef.current?.isStreaming()) return anamRef.current;
-//     const attempt = voiceAttemptRef.current + 1;
-//     voiceAttemptRef.current = attempt;
-//     setStatus("connecting");
-//     setError(null);
-//     setExpanded(true);
+  const connectVoice = useCallback(async () => {
+    if (anamRef.current?.isStreaming()) return anamRef.current;
+    const attempt = voiceAttemptRef.current + 1;
+    voiceAttemptRef.current = attempt;
+    setStatus("connecting");
+    setError(null);
+    setExpanded(true);
 
-//     try {
-//       const session = await getBackendSession();
-//       if (voiceAttemptRef.current !== attempt) {
-//         sessionRef.current = null;
-//         return null;
-//       }
-//       const { AnamEvent, createClient } = await import("@anam-ai/js-sdk");
-//       const anam = createClient(session.token);
-//       anamRef.current = anam;
-//       historyIndexRef.current = -1;
+    try {
+      const session = await getBackendSession();
+      if (voiceAttemptRef.current !== attempt) {
+        sessionRef.current = null;
+        return null;
+      }
+      const { AnamEvent, createClient } = await import("@anam-ai/js-sdk");
+      const anam = createClient(session.token);
+      anamRef.current = anam;
+      historyIndexRef.current = -1;
 
-//       anam.addListener(AnamEvent.SESSION_READY, () => {
-//         if (voiceAttemptRef.current !== attempt) {
-//           void anam.stopStreaming();
-//           return;
-//         }
-//         setStatus("live");
-//         setCallGateDismissed(true);
-//         setMicMuted(false);
-//         setSpeakerMuted(false);
-//         const greeting = "Hi — I can see you’re exploring Ruhana. What would you like to know?";
-//         addMessage("assistant", greeting);
-//         void anam.talk(greeting);
-//       });
+      anam.addListener(AnamEvent.SESSION_READY, () => {
+        if (voiceAttemptRef.current !== attempt) {
+          void anam.stopStreaming();
+          return;
+        }
+        setStatus("live");
+        setCallGateDismissed(true);
+        setMicMuted(false);
+        setSpeakerMuted(false);
+        const greeting = "Hi — I can see you’re exploring Ruhana. What would you like to know?";
+        addMessage("assistant", greeting);
+        void anam.talk(greeting);
+      });
 
-//       anam.addListener(AnamEvent.MIC_PERMISSION_DENIED, () => {
-//         setMicMuted(true);
-//         setCallGateDismissed(true);
-//         setStatus("error");
-//         setError("Microphone access is off. You can still type below.");
-//       });
+      anam.addListener(AnamEvent.MIC_PERMISSION_DENIED, () => {
+        setMicMuted(true);
+        setCallGateDismissed(true);
+        setStatus("error");
+        setError("Microphone access is off. You can still type below.");
+      });
 
-//       anam.addListener(AnamEvent.CONNECTION_CLOSED, () => {
-//         anamRef.current = null;
-//         setMicMuted(true);
-//         setStatus("ended");
-//       });
+      anam.addListener(AnamEvent.CONNECTION_CLOSED, () => {
+        anamRef.current = null;
+        setMicMuted(true);
+        setStatus("ended");
+      });
 
-//       anam.addListener(AnamEvent.MESSAGE_HISTORY_UPDATED, async (history) => {
-//         const index = history.length - 1;
-//         if (index <= historyIndexRef.current) return;
-//         const latest = history[index];
-//         if (!latest || latest.role !== "user") return;
-//         const text = String(latest.content ?? "").trim();
-//         if (!text) return;
-//         historyIndexRef.current = index;
-//         addMessage("user", text);
+      anam.addListener(AnamEvent.MESSAGE_HISTORY_UPDATED, async (history) => {
+        const index = history.length - 1;
+        if (index <= historyIndexRef.current) return;
+        const latest = history[index];
+        if (!latest || latest.role !== "user") return;
+        const text = String(latest.content ?? "").trim();
+        if (!text) return;
+        historyIndexRef.current = index;
+        addMessage("user", text);
 
-//         try {
-//           const reply = await askBrain(text, session.id);
-//           if (!reply) return;
-//           addMessage("assistant", reply);
-//           await anam.talk(reply);
-//         } catch {
-//           setError("I lost that answer. Please try once more.");
-//         }
-//       });
+        try {
+          const reply = await askBrain(text, session.id);
+          if (!reply) return;
+          addMessage("assistant", reply);
+          await anam.talk(reply);
+        } catch {
+          setError("I lost that answer. Please try once more.");
+        }
+      });
 
-//       await anam.streamToVideoElement("landing-avatar-video");
-//       if (voiceAttemptRef.current !== attempt) {
-//         await anam.stopStreaming();
-//         return null;
-//       }
-//       return anam;
-//     } catch (cause) {
-//       if (voiceAttemptRef.current !== attempt) return null;
-//       setStatus("error");
-//       setMicMuted(true);
-//       setError(cause instanceof Error ? cause.message : "The live preview could not start.");
-//       return null;
-//     }
-//   }, [addMessage, askBrain, getBackendSession]);
+      await anam.streamToVideoElement("landing-avatar-video");
+      if (voiceAttemptRef.current !== attempt) {
+        await anam.stopStreaming();
+        return null;
+      }
+      return anam;
+    } catch (cause) {
+      if (voiceAttemptRef.current !== attempt) return null;
+      setStatus("error");
+      setMicMuted(true);
+      setError(cause instanceof Error ? cause.message : "The live preview could not start.");
+      return null;
+    }
+  }, [addMessage, askBrain, getBackendSession]);
 
-//   const handleMic = useCallback(async () => {
-//     const current = anamRef.current;
-//     if (!current?.isStreaming()) {
-//       await connectVoice();
-//       return;
-//     }
-//     if (current.getInputAudioState().isMuted) {
-//       current.unmuteInputAudio();
-//       setMicMuted(false);
-//     } else {
-//       current.muteInputAudio();
-//       setMicMuted(true);
-//     }
-//   }, [connectVoice]);
+  const handleMic = useCallback(async () => {
+    const current = anamRef.current;
+    if (!current?.isStreaming()) {
+      await connectVoice();
+      return;
+    }
+    if (current.getInputAudioState().isMuted) {
+      current.unmuteInputAudio();
+      setMicMuted(false);
+    } else {
+      current.muteInputAudio();
+      setMicMuted(true);
+    }
+  }, [connectVoice]);
 
-//   const sendMessage = useCallback(async (event?: FormEvent) => {
-//     event?.preventDefault();
-//     const text = input.trim();
-//     if (!text || sending) return;
-//     setInput("");
-//     setSending(true);
-//     setError(null);
-//     setExpanded(true);
-//     setCallGateDismissed(true);
-//     addMessage("user", text);
+  const sendMessage = useCallback(async (event?: FormEvent) => {
+    event?.preventDefault();
+    const text = input.trim();
+    if (!text || sending) return;
+    setInput("");
+    setSending(true);
+    setError(null);
+    setExpanded(true);
+    setCallGateDismissed(true);
+    addMessage("user", text);
 
-//     try {
-//       const session = await getBackendSession();
-//       const reply = await askBrain(text, session.id);
-//       if (reply) {
-//         addMessage("assistant", reply);
-//         if (anamRef.current?.isStreaming()) await anamRef.current.talk(reply);
-//       }
-//     } catch (cause) {
-//       setError(cause instanceof Error ? cause.message : "Ruhana could not answer just now.");
-//     } finally {
-//       setSending(false);
-//     }
-//   }, [addMessage, askBrain, getBackendSession, input, sending]);
+    try {
+      const session = await getBackendSession();
+      const reply = await askBrain(text, session.id);
+      if (reply) {
+        addMessage("assistant", reply);
+        if (anamRef.current?.isStreaming()) await anamRef.current.talk(reply);
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Ruhana could not answer just now.");
+    } finally {
+      setSending(false);
+    }
+  }, [addMessage, askBrain, getBackendSession, input, sending]);
 
-//   const endSession = useCallback(async () => {
-//     voiceAttemptRef.current += 1;
-//     if (anamRef.current) await anamRef.current.stopStreaming();
-//     anamRef.current = null;
-//     sessionRef.current = null;
-//     setStatus("ended");
-//     setMicMuted(true);
-//     setCallGateDismissed(false);
-//     setExpanded(true);
-//   }, []);
+  const endSession = useCallback(async () => {
+    voiceAttemptRef.current += 1;
+    if (anamRef.current) await anamRef.current.stopStreaming();
+    anamRef.current = null;
+    sessionRef.current = null;
+    setStatus("ended");
+    setMicMuted(true);
+    setCallGateDismissed(false);
+    setExpanded(true);
+  }, []);
 
-//   if (!geometry.ready) return null;
+  if (!geometry.ready) return null;
 
-//   return (
-//     <aside
-//       aria-label="Try Ruhana live"
-//       className="demo-shell"
-//       data-mode={displayMode}
-//       data-status={status}
-//       style={{
-//         "--dock-progress": geometry.shapeProgress,
-//         height: geometry.height,
-//         left: geometry.left,
-//         top: geometry.top,
-//         width: geometry.width,
-//       } as React.CSSProperties}
-//     >
-//       <div className="demo-hero-view">
-//         <div className="demo-video-panel">
-//           {media.videoUrl && !previewFailed ? (
-//             <video
-//               autoPlay
-//               className="demo-avatar-video"
-//               id="landing-avatar-video"
-//               loop={status !== "live"}
-//               muted={speakerMuted || status !== "live"}
-//               onError={() => setPreviewFailed(true)}
-//               playsInline
-//               poster={demoImageUrl}
-//               src={status === "live" ? undefined : media.videoUrl}
-//             />
-//           ) : (
-//             // eslint-disable-next-line @next/next/no-img-element
-//             <img alt="" className="demo-avatar-fallback" src={demoImageUrl}/>
-//           )}
-//           {(!media.videoUrl || previewFailed) && <video aria-hidden="true" className="demo-stream-target" id="landing-avatar-video" autoPlay playsInline />}
-//           <div className="demo-video-wash" />
-//           <div className="demo-live-label"><span /> {status === "live" ? "Live" : "Preview"}</div>
-//           <div className="demo-avatar-caption">
-//             <strong>{demoName}</strong>
-//             <span>Ruhana product guide</span>
-//           </div>
-//           <button className="demo-sound" onClick={() => setSpeakerMuted((value) => !value)}
-//             type="button" aria-label={speakerMuted ? "Turn sound on" : "Mute sound"}>
-//             <Icon name={speakerMuted ? "mute" : "volume"} />
-//           </button>
-//         </div>
+  return (
+    <aside
+      aria-label="Try Ruhana live"
+      className="demo-shell"
+      data-mode={displayMode}
+      data-status={status}
+      style={{
+        "--dock-progress": geometry.shapeProgress,
+        height: geometry.height,
+        left: geometry.left,
+        top: geometry.top,
+        width: geometry.width,
+      } as React.CSSProperties}
+    >
+      <div className="demo-hero-view">
+        <div className="demo-video-panel">
+          {media.videoUrl && !previewFailed ? (
+            <video
+              autoPlay
+              className="demo-avatar-video"
+              id="landing-avatar-video"
+              loop={status !== "live"}
+              muted={speakerMuted || status !== "live"}
+              onError={() => setPreviewFailed(true)}
+              playsInline
+              poster={demoImageUrl}
+              src={status === "live" ? undefined : media.videoUrl}
+            />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img alt="" className="demo-avatar-fallback" src={demoImageUrl}/>
+          )}
+          {(!media.videoUrl || previewFailed) && <video aria-hidden="true" className="demo-stream-target" id="landing-avatar-video" autoPlay playsInline />}
+          <div className="demo-video-wash" />
+          <div className="demo-live-label"><span /> {status === "live" ? "Live" : "Preview"}</div>
+          <div className="demo-avatar-caption">
+            <strong>{demoName}</strong>
+            <span>Ruhana product guide</span>
+          </div>
+          <button className="demo-sound" onClick={() => setSpeakerMuted((value) => !value)}
+            type="button" aria-label={speakerMuted ? "Turn sound on" : "Mute sound"}>
+            <Icon name={speakerMuted ? "mute" : "volume"} />
+          </button>
+        </div>
 
-//         <div className="demo-conversation-panel">
-//           <div className="demo-panel-head">
-//             <div>
-//               <span className="demo-kicker">Live conversation</span>
-//               <strong>Help, without the hunt.</strong>
-//             </div>
-//             <div className="demo-panel-actions">
-//               <span className="demo-presence"><i /> Available now</span>
-//               {status === "live" && <button className="demo-end-call" onClick={endSession} type="button"><Icon name="end" size={15}/> End call</button>}
-//             </div>
-//           </div>
+        <div className="demo-conversation-panel">
+          <div className="demo-panel-head">
+            <div>
+              <span className="demo-kicker">Live conversation</span>
+              <strong>Help, without the hunt.</strong>
+            </div>
+            <div className="demo-panel-actions">
+              <span className="demo-presence"><i /> Available now</span>
+              {status === "live" && <button className="demo-end-call" onClick={endSession} type="button"><Icon name="end" size={15}/> End call</button>}
+            </div>
+          </div>
 
-//           <div className="demo-transcript" ref={transcriptRef} aria-live="polite">
-//             {messages.slice(-4).map((message, index) => (
-//               <div className="demo-message" data-role={message.role} key={`${message.role}-${index}-${message.text.slice(0, 12)}`}>
-//                 {message.text}
-//               </div>
-//             ))}
-//             {sending && <div className="demo-thinking"><i/><i/><i/><span className="sr-only">Ruhana is thinking</span></div>}
-//           </div>
+          <div className="demo-transcript" ref={transcriptRef} aria-live="polite">
+            {messages.slice(-4).map((message, index) => (
+              <div className="demo-message" data-role={message.role} key={`${message.role}-${index}-${message.text.slice(0, 12)}`}>
+                {message.text}
+              </div>
+            ))}
+            {sending && <div className="demo-thinking"><i/><i/><i/><span className="sr-only">Ruhana is thinking</span></div>}
+          </div>
 
-//           <div className="demo-context-card">
-//             <div className="demo-context-title"><Icon name="eye" size={15}/><span>Page context</span><b>Live</b></div>
-//             <div className="demo-context-row"><span>Viewing</span><strong>Growth plan</strong></div>
-//             <div className="demo-context-row"><span>Intent</span><strong>Comparing options</strong></div>
-//           </div>
+          <div className="demo-context-card">
+            <div className="demo-context-title"><Icon name="eye" size={15}/><span>Page context</span><b>Live</b></div>
+            <div className="demo-context-row"><span>Viewing</span><strong>Growth plan</strong></div>
+            <div className="demo-context-row"><span>Intent</span><strong>Comparing options</strong></div>
+          </div>
 
-//           {error && <p className="demo-error" role="status">{error}</p>}
-//           <form className="demo-composer" onSubmit={sendMessage}>
-//             <label className="sr-only" htmlFor="hero-demo-message">Ask Ruhana a question</label>
-//             <input id="hero-demo-message" onChange={(event) => setInput(event.target.value)}
-//               placeholder="Ask about pricing, setup, or your use case…" value={input} />
-//             <button className="demo-icon-button" data-active={status === "live" && !micMuted}
-//               onClick={handleMic} type="button" aria-label={status === "live" ? (micMuted ? "Unmute microphone" : "Mute microphone") : "Start voice conversation"}>
-//               <Icon name="mic" />
-//             </button>
-//             <button className="demo-send" disabled={!input.trim() || sending} type="submit" aria-label="Send message">
-//               <Icon name="send" size={17}/>
-//             </button>
-//           </form>
-//           <p className="demo-permission-note">Voice starts only when you press the microphone.</p>
-//         </div>
-//       </div>
+          {error && <p className="demo-error" role="status">{error}</p>}
+          <form className="demo-composer" onSubmit={sendMessage}>
+            <label className="sr-only" htmlFor="hero-demo-message">Ask Ruhana a question</label>
+            <input id="hero-demo-message" onChange={(event) => setInput(event.target.value)}
+              placeholder="Ask about pricing, setup, or your use case…" value={input} />
+            <button className="demo-icon-button" data-active={status === "live" && !micMuted}
+              onClick={handleMic} type="button" aria-label={status === "live" ? (micMuted ? "Unmute microphone" : "Mute microphone") : "Start voice conversation"}>
+              <Icon name="mic" />
+            </button>
+            <button className="demo-send" disabled={!input.trim() || sending} type="submit" aria-label="Send message">
+              <Icon name="send" size={17}/>
+            </button>
+          </form>
+          <p className="demo-permission-note">Voice starts only when you press the microphone.</p>
+        </div>
+      </div>
 
-//       <div className="demo-compact-view">
-//         <button className="demo-compact-main" onClick={() => { setCallGateDismissed(false); setExpanded(true); }} type="button" aria-label={"Open call options with " + demoName}>
-//           <span className="demo-thumb">
-//           {media.videoUrl && !previewFailed ? (
-//             <video autoPlay loop muted onError={() => setPreviewFailed(true)} playsInline poster={demoImageUrl} src={media.videoUrl}/>
-//           ) : (
-//             // eslint-disable-next-line @next/next/no-img-element
-//             <img alt="" src={demoImageUrl}/>
-//           )}
-//             <i aria-hidden="true"/>
-//           </span>
-//           <span className="demo-compact-copy"><strong>Need a hand?</strong><small>{"Talk with " + demoName + " about this page"}</small></span>
-//         </button>
-//         <button className="demo-compact-mic" data-active={status === "live" && !micMuted} onClick={handleMic}
-//           type="button" aria-label={status === "live" ? (micMuted ? "Unmute microphone" : "Mute microphone") : "Start call with " + demoName}>
-//           <Icon name="mic" size={19}/>
-//         </button>
-//       </div>
+      <div className="demo-compact-view">
+        <button className="demo-compact-main" onClick={() => { setCallGateDismissed(false); setExpanded(true); }} type="button" aria-label={"Open call options with " + demoName}>
+          <span className="demo-thumb">
+          {media.videoUrl && !previewFailed ? (
+            <video autoPlay loop muted onError={() => setPreviewFailed(true)} playsInline poster={demoImageUrl} src={media.videoUrl}/>
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img alt="" src={demoImageUrl}/>
+          )}
+            <i aria-hidden="true"/>
+          </span>
+          <span className="demo-compact-copy"><strong>Need a hand?</strong><small>{"Talk with " + demoName + " about this page"}</small></span>
+        </button>
+        <button className="demo-compact-mic" data-active={status === "live" && !micMuted} onClick={handleMic}
+          type="button" aria-label={status === "live" ? (micMuted ? "Unmute microphone" : "Mute microphone") : "Start call with " + demoName}>
+          <Icon name="mic" size={19}/>
+        </button>
+      </div>
 
-//       {showDockedCallGate && (
-//         <div className="demo-call-gate" data-connecting={status === "connecting"}>
-//           <button className="demo-call-gate-close" onClick={() => setExpanded(false)} type="button" aria-label="Close call options"><Icon name="close" size={18}/></button>
-//           <div className="demo-call-orbit">
-//             {media.videoUrl && !previewFailed ? (
-//               <video autoPlay loop muted onError={() => setPreviewFailed(true)} playsInline poster={demoImageUrl} src={media.videoUrl}/>
-//             ) : (
-//               // eslint-disable-next-line @next/next/no-img-element
-//               <img alt="" src={demoImageUrl}/>
-//             )}
-//             <span aria-hidden="true"/>
-//           </div>
-//           <div className="demo-call-gate-copy">
-//             <span>Available now</span>
-//             <strong>{status === "connecting" ? "Connecting your call…" : "Talk with " + demoName}</strong>
-//             <p>Ask a question naturally. Ruhana already understands the page you are viewing.</p>
-//           </div>
-//           <button className="demo-start-call" onClick={status === "connecting" ? endSession : connectVoice} type="button">
-//             <Icon name={status === "connecting" ? "end" : "mic"} size={18}/>{status === "connecting" ? "Cancel" : "Start call"}
-//           </button>
-//           <button className="demo-continue-text" disabled={status === "connecting"} onClick={() => setCallGateDismissed(true)} type="button">Continue by text</button>
-//           <small className="demo-call-permission">Microphone access is requested only after you start.</small>
-//         </div>
-//       )}
+      {showDockedCallGate && (
+        <div className="demo-call-gate" data-connecting={status === "connecting"}>
+          <button className="demo-call-gate-close" onClick={() => setExpanded(false)} type="button" aria-label="Close call options"><Icon name="close" size={18}/></button>
+          <div className="demo-call-orbit">
+            {media.videoUrl && !previewFailed ? (
+              <video autoPlay loop muted onError={() => setPreviewFailed(true)} playsInline poster={demoImageUrl} src={media.videoUrl}/>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img alt="" src={demoImageUrl}/>
+            )}
+            <span aria-hidden="true"/>
+          </div>
+          <div className="demo-call-gate-copy">
+            <span>Available now</span>
+            <strong>{status === "connecting" ? "Connecting your call…" : "Talk with " + demoName}</strong>
+            <p>Ask a question naturally. Ruhana already understands the page you are viewing.</p>
+          </div>
+          <button className="demo-start-call" onClick={status === "connecting" ? endSession : connectVoice} type="button">
+            <Icon name={status === "connecting" ? "end" : "mic"} size={18}/>{status === "connecting" ? "Cancel" : "Start call"}
+          </button>
+          <button className="demo-continue-text" disabled={status === "connecting"} onClick={() => setCallGateDismissed(true)} type="button">Continue by text</button>
+          <small className="demo-call-permission">Microphone access is requested only after you start.</small>
+        </div>
+      )}
 
-//       <div className="demo-mobile-head">
-//         <div><span className="demo-presence"><i /> {status === "live" ? "Live" : "Ready"}</span><strong>{demoName} · Ruhana</strong></div>
-//         <div className="demo-mobile-actions">
-//           {(status === "live" || status === "connecting") && <button onClick={endSession} type="button"><Icon name="end" size={14}/> End call</button>}
-//           <button onClick={() => setExpanded(false)} type="button" aria-label="Minimize assistant"><Icon name="close"/></button>
-//         </div>
-//       </div>
-//     </aside>
-//   );
-// }
+      <div className="demo-mobile-head">
+        <div><span className="demo-presence"><i /> {status === "live" ? "Live" : "Ready"}</span><strong>{demoName} · Ruhana</strong></div>
+        <div className="demo-mobile-actions">
+          {(status === "live" || status === "connecting") && <button onClick={endSession} type="button"><Icon name="end" size={14}/> End call</button>}
+          <button onClick={() => setExpanded(false)} type="button" aria-label="Minimize assistant"><Icon name="close"/></button>
+        </div>
+      </div>
+    </aside>
+  );
+}
 
 const steps = [
   {
@@ -1063,7 +1063,7 @@ export default function LandingPage({ authenticated }: LandingPageProps) {
           </div>
         </section>
 
-        {/* <LiveDemo anchorRef={heroDemoRef} /> */}
+        <LiveDemo anchorRef={heroDemoRef} />
 
         <section className="lp-context-section lp-section" id="context">
           <div className="lp-section-heading" data-reveal>
